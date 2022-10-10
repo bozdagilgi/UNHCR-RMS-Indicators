@@ -1,0 +1,520 @@
+
+
+#####Standard scripts for RMS 
+
+
+###Disaggregation Variables
+
+###Country of Origin --- citizenship_com
+###Age categories --- HH07_cat
+###Gender of HH head --- HH04 (filter for when HH03==1)
+###Disability --- disab
+###Population group -- pop_groups
+
+
+labelled_chr2dbl <- function(x) {
+  varlab <- var_label(x)
+  vallab <- val_labels(x)
+  vallab <- setNames(as.numeric(vallab),
+                     names(vallab))
+  x <- as.numeric(as.character(x))
+  var_label(x) <- varlab
+  val_labels(x) <- vallab
+  x
+}
+
+##Impact Indicators
+
+###2.2 Proportion of PoCs residing in physically safe and secure settlements with access to basic facilities.
+##Module :	HEA01-HEA03 (health) + LIGHT01-LIGHT03 (9.2) + DWA01-DWA04 (12.1) + DWE01-DWE05 & DWE08 - DWE09 (9.1)
+
+##Step1. Calculate access to health facilities -according to Sphere standards- it should be reachable within 1 hour 
+
+####Access to health facility: If respondent knows where to reach within 1 hour distance (any type of transport)
+class(main$HEA01) #character
+class(main$HEA03) #integer
+
+main$HEA01_num <- labelled_chr2dbl(main$HEA01)
+class(main$HEA01_num) #double
+
+main <- main %>%
+  mutate(health_acc=
+           case_when(HEA01_num!=98 & HEA03 <= 60 ~ 1,
+                     TRUE ~ 0)
+  ) %>%
+  mutate( health_acc = labelled(health_acc,
+                               labels = c(
+                                 "Health facility is available" = 1,
+                                 "Health facilitiy is not available" = 0
+                               ),
+                               label = "Access to health facilities"))
+      
+#Step2. calculate percentage of PoC having access to clean fuel for lighting and / or basic connectivity (9.1)
+###for LIGHT02 Only include options based on metadata (exclude diesel generator, candles, kerosene)
+
+main$LIGHT01_num <- labelled_chr2dbl(main$LIGHT01)
+main$LIGHT02_num <- labelled_chr2dbl(main$LIGHT02)
+main$LIGHT03_num <- labelled_chr2dbl(main$LIGHT03)
+
+main <- main %>% 
+  mutate(electricity=
+           case_when(LIGHT01_num==1 & (LIGHT02_num==1 |LIGHT02_num==3 | LIGHT02_num==5 | LIGHT02_num==6 
+                                      | LIGHT02_num==7 | LIGHT02_num==8) & 
+                       (LIGHT03_num!=1 | LIGHT03_num!=96 | LIGHT03_num!=98 ) ~ 1,
+                     TRUE ~ 0)
+  ) %>%
+  mutate( electricity = labelled(electricity,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "Access to electricity"))
+
+#Step3. calculate percentage of PoCs using at least basic water services (12.2)
+###Improved drinking water resource that is accessible under 30 minutes in the last 30 days
+
+main$DWA03a_num <- labelled_chr2dbl(main$DWA03a)
+main$DWA02_num <- labelled_chr2dbl(main$DWA02)
+main$DWA01_num <- labelled_chr2dbl(main$DWA01)
+main$DWA04_num <- labelled_chr2dbl(main$DWA04)
+class(main$DWA03a_num)
+class(main$DWA03b)
+main <- main %>%
+  
+  mutate(time_DWA=case_when(
+    DWA03a_num==1~1, DWA03a_num==2~60)
+  ) %>%
+  mutate(time_tot=time_DWA*DWA03b
+  ) %>%
+  mutate(dwa_cond1=case_when( time_tot > 30 ~ 0, TRUE ~ 1) ##Accessible under 30 minutes
+  ) %>%
+  mutate(dwa_cond2=case_when(DWA01_num!=7 |DWA01_num !=9 |DWA01_num != 13 | DWA01_num != 96 |DWA01_num !=98 ~ 1,
+                             TRUE ~ 0) ## protected source
+  ) %>%
+  mutate(dwa_cond3=case_when(DWA04_num==1 ~ 0, TRUE ~ 1) ## It was available in the last 30 days
+  ) %>%
+  mutate(drinkingwater=case_when(
+    (dwa_cond1==1 & dwa_cond2==1 & dwa_cond3==1) ~ 1, TRUE ~ 0)
+  ) %>%
+  mutate(drinkingwater = labelled(drinkingwater,
+                                 labels = c(
+                                   "Yes" = 1,
+                                   "No" = 0
+                                 ),
+                                 label = "Access to drinking water"))
+
+main$drinkingwater
+
+##Step.4. indicator aims to measure the proportion of persons of concern that reside in safe 
+###and secure settlements with access to basic services such as shelter
+
+###Calculate DWE01 to DWE04 for shelter
+
+###Turn all variables into numeric
+
+main$DWE01_num <- labelled_chr2dbl(main$DWE01)
+main$DWE02_num <- labelled_chr2dbl(main$DWE02)
+main$DWE03_num <- labelled_chr2dbl(main$DWE03)
+main$DWE04_num <- labelled_chr2dbl(main$DWE04)
+class(main$DWE05)
+
+##classify DWE01 as 1 when it has decent quality/improved 
+
+main <- main %>%
+  
+  mutate(dwe01_cat=case_when( #Only apartment and house
+         (DWE01_num==1 | DWE01_num==2) ~ 1, TRUE ~ 0 )
+  ) %>%
+  mutate(dwe02_cat=case_when( #unimproved floor when earth,sand,clay,mud, dung or other
+    (DWE02_num==1 | DWE02_num==2 | DWE02_num==96) ~ 0, TRUE ~ 1 )
+  ) %>%
+  mutate(dwe03_cat=case_when( #unimproved roof all options except metal,wood,ceramic tiles, cement, roofing shingles/sheets
+    (DWE03_num==8 |DWE03_num==9 | DWE03_num==10 | DWE03_num==11 |
+       DWE03_num==12 | DWE03_num==13 | DWE03_num==8) ~ 1 , TRUE ~ 0)
+  ) %>%
+  mutate(dwe04_cat=case_when( #improved wall: cement,stone,bricks,cement blocks, covered adobe, wood planks
+    (DWE04_num==10| DWE04_num==11| DWE04_num==12| DWE04_num==13| DWE04_num==14| DWE04_num==15) ~ 1,
+  TRUE ~ 0)
+  ) 
+
+
+####Calculate crowding index
+
+main <- main %>%
+  
+  mutate(crowding=DWE05/HH01
+  ) %>%
+  mutate(dwe05_cat=case_when( ##if crowding < 3 
+    crowding < 3 ~ 1, TRUE ~ 0)
+  )
+    
+## Add DWE08 and DWE09 to calculations - if HH is paying rent, can they afford to pay rent without financial distress
+
+
+main$DWE08_num <- labelled_chr2dbl(main$DWE08)
+main$DWE09_num <- labelled_chr2dbl(main$DWE09)
+main <- main %>%
+  
+  mutate(dwe09_cat=case_when( #affordable if HH pays rent and often and always without financial distress
+   (DWE08_num==1 & (DWE09_num==1 | DWE09_num==2)) ~ 1, 
+     (DWE08_num==1 & (DWE09_num==3 | DWE09_num==4)) ~ 0,  DWE08_num==0 ~ NA_real_)
+  )
+
+####Combine all shelter indicators 
+
+##dwe01_cat / dwe02_cat / dwe03_cat / dwe04_cat / dwe05_cat / dwe09_cat
+
+
+main <- main %>%
+  
+  mutate(shelter=case_when(
+    dwe01_cat==0 | dwe02_cat==0 | dwe03_cat==0 | dwe04_cat==0 | dwe05_cat==0 | dwe09_cat==0  ~ 0, 
+    dwe01_cat==1 & dwe02_cat==1 & dwe03_cat==1 & dwe04_cat==1 & dwe05_cat==1 & dwe09_cat==1 ~ 1)
+    ) %>%
+  mutate( shelter = labelled(shelter,
+                                 labels = c(
+                                   "Yes" = 1,
+                                   "No" = 0
+                                 ),
+                                 label = "Habitable and affordable shelter"))
+    
+
+
+###Step5. Calculate impact indicator based on shelter, electricity, drinkingwater and health_acc
+
+main <-main %>%
+  
+  mutate(impact2_2=case_when(
+    shelter==0 | electricity==0 | drinkingwater==0 | health_acc==0 ~ 0,
+    shelter==1 & electricity==1 & drinkingwater==1 & health_acc==1 ~ 1)
+  ) %>% 
+  mutate(impact2_2=labelled(impact2_2,
+                            labels =c(
+                              "Yes"=1,
+                              "No"=0
+                            ),
+                  label="PoCs residing in physically safe and secure settlements with access to basic facilities"))
+    
+
+###2.3 Proportion of PoC with access to health services.
+##Module :HACC01 - HACC04
+
+####Individual level indicator asked all HH members
+
+ind$HACC01_num <- labelled_chr2dbl(ind$HACC01)
+ind$HACC03_num <- labelled_chr2dbl(ind$HACC03)
+class(ind$HACC04_1)
+
+#Calculate those who were not able to access due to reasons unrelated to asked services (when HACC04 is 7/8/96)
+
+ind <- ind %>%
+  
+  mutate(health_NOacc=case_when(
+      HACC03_num==1 & (HACC04_7==1 | HACC04_8==1 | HACC04_96==1 ) ~ 0,
+      HACC03_num==1 & (HACC04_1==1 | HACC04_2==1 | HACC04_3==1 |HACC04_4==1 |HACC04_5==1 |
+                         HACC04_6==1 | HACC04_9==1 | HACC04_10==1) ~ 1, TRUE ~ 0)
+  ) %>% ## Those who needed services
+  mutate(HACC_need=HACC01_num + health_NOacc
+  ) %>%
+  mutate(impact2_3=HACC01_num/HACC_need 
+  ) %>%
+  mutate(impact2_3=labelled(impact2_3,
+                             labels =c(
+                               "Yes"=1,
+                               "No"=0
+                             ),
+                             label="PoC has access to health services in the last 30 days when needed"))
+ind$impact2_3[is.nan(ind$impact2_3)]<-NA
+
+
+  
+#calculate overall impact2_3
+class(ind$impact2_3)
+mean(is.na(ind$impact2_3))
+
+
+###3.2a: Proportion of PoC enrolled in primary education regardless of age
+##Module :EDU01-EDU04
+
+
+#Turn character variables into vector
+ind$EDU01_num <- labelled_chr2dbl(ind$EDU01)
+ind$EDU02_num <- labelled_chr2dbl(ind$EDU02)
+ind$EDU03_num <- labelled_chr2dbl(ind$EDU03)
+
+
+ ind<- ind %>%
+   mutate(edu_enrollpri=case_when(
+     EDU01_num==1 & EDU02_num==1 & EDU03_num==2 ~ 1, EDU01_num==0 | EDU02_num==0 ~ 0, TRUE ~ 0)
+   ) %>%
+   mutate(age_primary=case_when(
+     HH07 >= 6 & HH07 <=10 ~ 1, TRUE ~ 0) #Contextualise age group for primary school attendance 
+   ) %>%
+   mutate(impact3_2a=sum(edu_enrollpri)/sum(age_primary)
+   ) %>%
+   mutate(impact3_2a=labelled(impact3_2b,
+                              labels =c(
+                                "Yes"=1,
+                                "No"=0
+                              ),
+                              label="PoC enrolled in primary education"))
+ 
+ mean(ind$impact3_2a)
+
+###3.2b: Proportion of PoC enrolled in secondary education
+##Module :EDU01-EDU04
+ 
+ #Turn character variables into vector
+ ind$EDU01_num <- labelled_chr2dbl(ind$EDU01)
+ ind$EDU02_num <- labelled_chr2dbl(ind$EDU02)
+ ind$EDU03_num <- labelled_chr2dbl(ind$EDU03)
+ 
+ #Include if they are attending secondary or secondary -technical and vocational
+ ind<- ind %>%
+   mutate(edu_enrollsec=case_when(
+     EDU01_num==1 & EDU02_num==1 & (EDU03_num==3 | EDU03_num==4) ~ 1, EDU01_num==0 | EDU02_num==0 ~ 0, 
+     TRUE ~ 0)
+   ) %>%
+   mutate(age_secondary=case_when(
+     HH07 >= 11 & HH07 <=18 ~ 1, TRUE ~ 0) #Contextualise age group for secondary school attendance 
+   ) %>%
+   mutate(impact3_2b=sum(edu_enrollsec)/sum(age_secondary)
+   ) %>%
+   mutate(impact3_2b=labelled(impact3_2b,
+                             labels =c(
+                               "Yes"=1,
+                               "No"=0
+                             ),
+                             label="PoC enrolled in secondary education"))
+ 
+ 
+ mean(ind$impact3_2b)
+
+###3.3 Proportion of PoC feeling safe walking alone in their neighborhood
+##Module :SAF01
+
+ ##This indicator comes from main dataset based on the respondent randomly selected for individual level
+ ##questions
+ 
+ 
+ #Turn character variables into vector
+main$SAF01_num <- labelled_chr2dbl(main$SAF01)
+#if unsafe or very unsafe 0 - if don't know - 98 include, refusals will go into missing
+  main <- main %>%
+   mutate(impact3_3=case_when(
+     SAF01_num==1 | SAF01_num==2 ~ 1,
+     SAF01_num==3 | SAF01_num==4 | SAF01_num==98 ~ 0, SAF01_num==99 ~ NA_real_)
+   ) %>% 
+    mutate(impact3_3=labelled(impact3_3,
+                                   labels =c(
+                                     "Yes"=1,
+                                     "No"=0
+                                   ),
+                                   label="PoC feeling safe walking alone"))
+    
+
+###Outcome Indicators
+
+###1.2 Proportion of children <5 years whose birth have been registered with a civil authority
+##Module :REG03 - REG04
+  
+  ind$REG03_num <- labelled_chr2dbl(ind$REG03) # birth certificate
+  ind$REG04_num <- labelled_chr2dbl(ind$REG04) # birth has been registered
+  
+  ##Calculate children who has a birth certificate
+  
+  ind <- ind %>%
+    mutate(birthCertificate=case_when(
+      REG03_num==0 | REG03_num==98 ~ 0, REG03_num==1 ~ 1)
+           ) %>%
+    mutate(birthCertificate=labelled(birthCertificate,
+                                  labels=c(
+                                    'Yes'=1,
+                                    'No'=0
+                                  ),
+                                  label="Children under 5 with a birth certificate"))
+  ##Calculate children who has been registered with civil authorities
+  
+  ind <- ind %>%
+    mutate(birthRegistered=case_when(
+      REG04_num==0 | REG04_num==98 ~ 0, REG04_num==1 ~ 1, REG04_num==99 ~NA_real_)
+    ) %>%
+    mutate(birthRegistered=labelled(birthRegistered,
+                                  labels=c(
+                                    'Yes'=1,
+                                    'No'=0
+                                  ),
+                                  label="Children under 5 birth registered with civil authorities"))
+  
+  
+  ##Calculate outcome indicator 1.2
+                                 
+  
+  ind <- ind %>%
+    mutate(outcome1_2=case_when(
+      birthRegistered==1 & HH07 <=5 ~ 1, birthRegistered==0 & HH07 <=5 ~ 0)
+    ) %>%
+    mutate(outcome1_2=labelled(outcome1_2,
+                                    labels=c(
+                                      'Yes'=1,
+                                      'No'=0
+                                    ),
+                                    label="Proportion of children under 5 birth registered with civil authorities"))
+###1.3 Proportion of PoC with legally recognized identity documents or credentials
+##Module :REG01 - REG02 - REG05 - REG06
+  
+  ###Calculate having documents for children under 5
+  
+  ##Turn into numeric variables 
+  
+  
+  ind$REG05a_num <- labelled_chr2dbl(ind$REG05a) # passport
+  ind$REG05b_num <- labelled_chr2dbl(ind$REG05b) # civil/government issued ID
+  ind$REG05c_num <- labelled_chr2dbl(ind$REG05c) # residency permit
+  ind$REG05d_num <- labelled_chr2dbl(ind$REG05d) # statelessness documentation
+  ind$REG05e_num <- labelled_chr2dbl(ind$REG05e) # household card of address/family book
+  ind$REG05f_num <- labelled_chr2dbl(ind$REG05f) # social security card
+  ind$REG06_num <- labelled_chr2dbl(ind$REG06) # any other document establishes identity
+  
+  #add birth certificate as additional document from REG03
+  ind <- ind %>%
+    mutate(document_under5=case_when(
+      REG05a_num==1 | REG05b_num==1 | REG05c_num==1 | REG05d_num==1 | REG05e_num==1 |
+        REG05f_num==1 |REG06_num==1 | birthCertificate==1 ~ 1, 
+      REG05a_num==0 & REG05b_num==0 & REG05c_num==0 & REG05d_num==0 & REG05e_num==0 &
+        REG05f_num==0 & REG06_num==0 & birthCertificate==0 ~ 0, TRUE ~ NA_real_
+    ))
+  
+  ###Calculate having documents for above 5
+  
+  ##Turn into numeric variables 
+  
+  
+  ind$REG01a_num <- labelled_chr2dbl(ind$REG01a) # passport
+  ind$REG01b_num <- labelled_chr2dbl(ind$REG01b) # birth certificate
+  ind$REG01c_num <- labelled_chr2dbl(ind$REG01c) # civil/ government issued ID
+  ind$REG01d_num <- labelled_chr2dbl(ind$REG01d) # residency permit
+  ind$REG01e_num <- labelled_chr2dbl(ind$REG01e) # statelessness documentation
+  ind$REG01f_num <- labelled_chr2dbl(ind$REG01f) # household card of address/family book
+  ind$REG01g_num <- labelled_chr2dbl(ind$REG01g) # social security card
+  ind$REG02_num <- labelled_chr2dbl(ind$REG02) # any other document establishes identity
+  
+  #add birth certificate as additional document from REG03
+  ind <- ind %>%
+    mutate(document_above5=case_when(
+      REG01a_num==1 | REG01b_num==1 | REG01c_num==1 | REG01d_num==1 | REG01e_num==1 |
+        REG01f_num==1 | REG01g_num==1 |REG02_num==1 ~ 1,
+      REG01a_num==0 & REG01b_num==0 & REG01c_num==0 & REG01d_num==0 & REG01e_num==0 &
+        REG01f_num==0 & REG01g_num==0 & REG02_num==0 ~ 0, TRUE ~ NA_real_)
+      
+  ##calculate outcome indicator by combining under 5 and above 5 responses
+    ) %>%
+    mutate(outcome1_3=case_when(
+     (document_above5==1 | document_under5==1) ~ 1,  
+     (document_above5==0 | document_under5==0) ~ 0)
+    ) %>%
+    mutate(outcome1_3=labelled(outcome1_3,
+                               labels=c(
+                                 'Yes'=1,
+                                 'No'=0
+                               ),
+                               label="PoCs with legally recognized documents"))
+
+  
+
+###4.1 Proportion of PoC who know where to access available GBV services
+##Module :GBV01
+  
+  ##Turn into numeric variables for services
+  
+  main$GBV01a_num <- labelled_chr2dbl(main$GBV01a) # health services
+  main$GBV01b_num <- labelled_chr2dbl(main$GBV01b) # psycho-social services
+  main$GBV01c_num <- labelled_chr2dbl(main$GBV01c) # safety and security services
+  main$GBV01d_num <- labelled_chr2dbl(main$GBV01d) # legal assistance
+  
+  main <- main %>%
+    mutate(outcome4_1=case_when(
+      GBV01a_num==1 |  GBV01b_num==1 |  GBV01c_num==1 |  GBV01d_num==1 ~ 1,
+      TRUE ~ 0)
+    ) %>%
+    mutate(outcome4_1=labelled(outcome4_1,
+                               labels=c(
+                                 'Yes'=1,
+                                 "No"=0
+                               ),
+                               label="Poc who know where to access available GBV services"
+                               ))
+      
+  
+  
+###4.2 Proportion of PoC who do not accept violence against women
+##Module :VAW01
+  
+  #If randomly selected adult who believes a husband is justified in beating his wife in various circumstances
+  
+  #Turn into numeric variables
+  main$VAW01a_num <- labelled_chr2dbl(main$VAW01a)
+  main$VAW01b_num <- labelled_chr2dbl(main$VAW01b)
+  main$VAW01c_num <- labelled_chr2dbl(main$VAW01c)
+  main$VAW01d_num <- labelled_chr2dbl(main$VAW01d)
+  main$VAW01e_num <- labelled_chr2dbl(main$VAW01e)
+  ##If yes selected for any of the circumstances
+ main <- main %>%
+   mutate(outcome4_2=case_when(
+     VAW01a_num==1 | VAW01b_num==1 |  VAW01c_num==1 |  VAW01d_num==1 | VAW01e_num==1 ~ 1,
+     VAW01a_num==0 & VAW01b_num==0 &  VAW01c_num==0 &  VAW01d_num==0 & VAW01e_num==0 ~ 0,
+     TRUE ~ NA_real_)
+   ) %>%
+   mutate(outcome4_2=labelled(outcome4_2,
+                              labels=c(
+                                'Yes'=1,
+                                "No"=0
+                              ),
+                              label="Poc who do not accept violence against women"
+   ))
+ 
+   
+###5.2 Proportion of children who participate in community-based child protection programmes
+##Module :COMM01-COMM04
+ 
+ 
+
+###8.2 Proportion of PoC with primary reliance on clean (cooking) fuels and technology
+##Module :COOK01-COOK03
+
+###9.1 Proportion of PoC living in habitable and affordable housing
+##Module :DWE01-DWE05 & DWE08-DWE09
+
+###9.2 Proportion of PoC that have energy to ensure lighting
+##Module :LIGHT01-LIGHT03
+
+###10.1 Proportion of children 9mo-5years who have received measles vaccination
+##Module :MMR01-MMR04
+
+###10.2 Proportion of births attended by skilled health personnel
+##Module :BIR01-BIR04
+
+###12.1 Proportion of PoC using at least basic drinking water services
+##Module :DWA01-DWA04
+
+###12.2 Proportion of PoC with access to a safe household toilet
+##Module :TOI01-TOI05
+
+###13.1 Proportion of PoC with an account at a bank or other financial institution or with a mobile-money service provider
+##Module :BANK01-BANK05
+
+###13.2 Proportion of PoC who self-report positive changes in their income compared to previous year
+##Module :INC01
+
+###13.3 Proportion of PoC (working age) who are unemployed
+##Module :UNEM01-UNEM010
+
+###14.1 Proportion of returnees with legally recognized identity documents or credentials to support the return
+##Module :REG01-REG06
+
+###16.1 Proportion of PoC with secure tenure rights and/or property rights to housing and/or land
+##Module :DWE06-DWE07 & DWE10-DWE11
+
+###16.2 Proportion of PoC covered by social protection floors/systems
+##Module :UNHCR Core Indicator Metadata	SPF01
+
