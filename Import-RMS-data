@@ -24,15 +24,15 @@ library(dm)
 
 ### insert your username from kobo/UNHCR
 
-kobo_token(username = "xxxx",
-           password = "xxxx",
+kobo_token(username = "xxxx", ###add your kobo name
+           password = "xxxx", ###add your password
            url = "https://kobo.unhcr.org")
 
 
-### enter your token
+### enter your token -- select token 
 
 kobo_setup(url = "https://kobo.unhcr.org",
-           token = "f06f983860da35abbf2574611c058b22fe8ea302")
+           token = "f06f983860da35abbf2574611c058b22fe8ea302") ## replace token here
 
 ### access data - enter name here
 
