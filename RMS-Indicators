@@ -477,28 +477,277 @@ main$SAF01_num <- labelled_chr2dbl(main$SAF01)
 ###5.2 Proportion of children who participate in community-based child protection programmes
 ##Module :COMM01-COMM04
  
+ #Turn into numeric variables
+ ind$COMM01_num <- labelled_chr2dbl(ind$COMM01)
+ ind$COMM02_num <- labelled_chr2dbl(ind$COMM02)
+ ind$COMM03_num <- labelled_chr2dbl(ind$COMM03)
+ ind$COMM04_num <- labelled_chr2dbl(ind$COMM04)
  
+ #Children who attended at least 2 times, under adult supervision in a physically safe area
+ 
+ ind <- ind %>%
+   mutate(outcome5_2=case_when(
+     (COMM01_num==1 & COMM02_num >=2 & COMM03_num==1 & COMM04_num==1) ~ 1,
+     COMM01_num==0 | COMM02_num < 2 | COMM03_num==0 | COMM03_num==98 |
+       COMM03_num==0 | COMM03_num==98 ~ 0, TRUE ~ NA_real_)
+   ) %>%
+   mutate(outcome5_2=labelled(outcome5_2,
+                              labels=c(
+                                'Yes'=1,
+                                "No"=0
+                              ),
+                              label="Poc of children who participate in community-based 
+                              child protection programmes"
+   ))
+   
 
 ###8.2 Proportion of PoC with primary reliance on clean (cooking) fuels and technology
 ##Module :COOK01-COOK03
+ 
+ ###Based on MICS calculation : TC4.1
+ 
+ main$COOK01_num <- labelled_chr2dbl(main$COOK01)
+ main$COOK02_num <- labelled_chr2dbl(main$COOK02)
+ main$COOK03_num <- labelled_chr2dbl(main$COOK03)
+ 
+main <- main %>%
+   mutate(
+     outcome8_2 = case_when(
+       COOK01_num == 1 & (COOK02 %in% c("1", "2", "3", "4", "5") | (COOK02 %in% c("6", "96") & COOK03 %in% c("1", "2", "3", "22"))) ~ 1, # see https://mics.unicef.org/files?job=W1siZiIsIjIwMTcvMDIvMDMvMTYvMjcvMjUvNTk5L1BpY3RvcmlhbHNfV0hPX0hvdXNlaG9sZF9FbmVyZ3lfVXNlX0NhdGFsb2d1ZV9TZXB0ZW1iZXJfMjAxNl8ucGRmIl1d&sha=57b4a452fcc0ac88
+       COOK01_num == 1 & (COOK02 %in% c("7", "8", "9", "10") | (COOK02 %in% c("6", "96") & !(COOK03 %in% c("1", "2", "3", "22")))) ~ 0,
+       COOK01_num == 0 ~ NA_real_
+     )
+   ) %>%
+   mutate(
+     outcome8_2 = labelled(outcome8_2,
+                            labels = c(
+                              "No" = 0,
+                              "Yes" = 1
+                            ),
+                            label = "PoC with primary reliance on clean (cooking) fuels and technology"
+     )
+     
+   )
+ 
+ 
 
 ###9.1 Proportion of PoC living in habitable and affordable housing
 ##Module :DWE01-DWE05 & DWE08-DWE09
 
+###Calculate DWE01 to DWE04 for shelter
+
+###Turn all variables into numeric
+
+main$DWE01_num <- labelled_chr2dbl(main$DWE01)
+main$DWE02_num <- labelled_chr2dbl(main$DWE02)
+main$DWE03_num <- labelled_chr2dbl(main$DWE03)
+main$DWE04_num <- labelled_chr2dbl(main$DWE04)
+class(main$DWE05)
+
+##classify DWE01 as 1 when it has decent quality/improved 
+
+main <- main %>%
+  
+  mutate(dwe01_cat=case_when( #Only apartment and house
+    (DWE01_num==1 | DWE01_num==2) ~ 1, TRUE ~ 0 )
+  ) %>%
+  mutate(dwe02_cat=case_when( #unimproved floor when earth,sand,clay,mud, dung or other
+    (DWE02_num==1 | DWE02_num==2 | DWE02_num==96) ~ 0, TRUE ~ 1 )
+  ) %>%
+  mutate(dwe03_cat=case_when( #unimproved roof all options except metal,wood,ceramic tiles, cement, roofing shingles/sheets
+    (DWE03_num==8 |DWE03_num==9 | DWE03_num==10 | DWE03_num==11 |
+       DWE03_num==12 | DWE03_num==13 | DWE03_num==8) ~ 1 , TRUE ~ 0)
+  ) %>%
+  mutate(dwe04_cat=case_when( #improved wall: cement,stone,bricks,cement blocks, covered adobe, wood planks
+    (DWE04_num==10| DWE04_num==11| DWE04_num==12| DWE04_num==13| DWE04_num==14| DWE04_num==15) ~ 1,
+    TRUE ~ 0)
+  ) 
+
+
+####Calculate crowding index
+
+main <- main %>%
+  
+  mutate(crowding=DWE05/HH01
+  ) %>%
+  mutate(dwe05_cat=case_when( ##if crowding < 3 
+    crowding < 3 ~ 1, TRUE ~ 0)
+  )
+
+## Add DWE08 and DWE09 to calculations - if HH is paying rent, can they afford to pay rent without financial distress
+
+
+main$DWE08_num <- labelled_chr2dbl(main$DWE08)
+main$DWE09_num <- labelled_chr2dbl(main$DWE09)
+main <- main %>%
+  
+  mutate(dwe09_cat=case_when( #affordable if HH pays rent and often and always without financial distress
+    (DWE08_num==1 & (DWE09_num==1 | DWE09_num==2)) ~ 1, 
+    (DWE08_num==1 & (DWE09_num==3 | DWE09_num==4)) ~ 0,  DWE08_num==0 ~ NA_real_)
+  )
+
+####Combine all shelter indicators 
+
+##dwe01_cat / dwe02_cat / dwe03_cat / dwe04_cat / dwe05_cat / dwe09_cat
+
+
+main <- main %>%
+  
+  mutate(outcome9_1=case_when(
+    dwe01_cat==0 | dwe02_cat==0 | dwe03_cat==0 | dwe04_cat==0 | dwe05_cat==0 | dwe09_cat==0  ~ 0, 
+    dwe01_cat==1 & dwe02_cat==1 & dwe03_cat==1 & dwe04_cat==1 & dwe05_cat==1 & dwe09_cat==1 ~ 1)
+  ) %>%
+  mutate( outcome9_1 = labelled(outcome9_1,
+                             labels = c(
+                               "Yes" = 1,
+                               "No" = 0
+                             ),
+                             label = "PoC living in habitable and affordable housing"))
+
+
+
 ###9.2 Proportion of PoC that have energy to ensure lighting
 ##Module :LIGHT01-LIGHT03
 
+main$LIGHT01_num <- labelled_chr2dbl(main$LIGHT01)
+main$LIGHT02_num <- labelled_chr2dbl(main$LIGHT02)
+main$LIGHT03_num <- labelled_chr2dbl(main$LIGHT03)
+
+main <- main %>% 
+  mutate(outcome9_2=
+           case_when(LIGHT01_num==1 & (LIGHT02_num==1 |LIGHT02_num==3 | LIGHT02_num==5 | LIGHT02_num==6 
+                                       | LIGHT02_num==7 | LIGHT02_num==8) & 
+                       (LIGHT03_num!=1 | LIGHT03_num!=96 | LIGHT03_num!=98 ) ~ 1,
+                     TRUE ~ 0)
+  ) %>%
+  mutate( outcome9_2 = labelled(outcome9_2,
+                                 labels = c(
+                                   "Yes" = 1,
+                                   "No" = 0
+                                 ),
+                                 label = "PoC that have energy to ensure lighting"))
+
+
 ###10.1 Proportion of children 9mo-5years who have received measles vaccination
-##Module :MMR01-MMR04
+##Module :MMR01-MMR04 ##  MICS TC.1.1 UNICEF calculates on the first dose received##
+
+#Calculate into numeric
+ind$MMR03_num <- labelled_chr2dbl(ind$MMR03)
+
+##Children who had et least one dose of measles vaccination
+
+ind <- ind %>%
+  mutate(outcome10_1=case_when(
+    MMR03_num==1 ~ 1, MMR03_num==0  | MMR03_num==98 ~ 0)
+  ) %>%
+  mutate( outcome10_1 = labelled(outcome10_1,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "Children 9mo-5years who have received measles vaccination"))
+
+
 
 ###10.2 Proportion of births attended by skilled health personnel
 ##Module :BIR01-BIR04
 
+##If there are live births in the last 2 years
+
+main$BIR03_num <- labelled_chr2dbl(main$BIR03)
+main$BIR01_num <- labelled_chr2dbl(main$BIR01)
+main$BIR02_num <- labelled_chr2dbl(main$BIR02)
+
+main <- main %>%
+  mutate(outcome10_2=case_when( 
+    (BIR01_num==1 | BIR02_num==1) & (BIR03_num==1 |BIR03_num==2 | BIR03_num==3 ) ~ 1,
+    (BIR01_num==1 | BIR02_num==1) & (BIR03_num==4 |BIR03_num==5 | BIR03_num==6 
+                                     | BIR03_num==96| BIR03_num==98) ~ 0, 
+    TRUE ~ NA_real_)
+  ) %>%
+  mutate( outcome10_2 = labelled(outcome10_2,
+                                 labels = c(
+                                   "Yes" = 1,
+                                   "No" = 0
+                                 ),
+                                 label = "Births attended by skilled health personnel"))
+  
+                     
+
 ###12.1 Proportion of PoC using at least basic drinking water services
 ##Module :DWA01-DWA04
 
+###Improved drinking water resource that is accessible under 30 minutes in the last 30 days
+
+main$DWA03a_num <- labelled_chr2dbl(main$DWA03a)
+main$DWA02_num <- labelled_chr2dbl(main$DWA02)
+main$DWA01_num <- labelled_chr2dbl(main$DWA01)
+main$DWA04_num <- labelled_chr2dbl(main$DWA04)
+class(main$DWA03a_num)
+class(main$DWA03b)
+main <- main %>%
+  
+  mutate(time_DWA=case_when(
+    DWA03a_num==1~1, DWA03a_num==2~60)
+  ) %>%
+  mutate(time_tot=time_DWA*DWA03b
+  ) %>%
+  mutate(dwa_cond1=case_when( time_tot > 30 ~ 0, TRUE ~ 1) ## accessible under 30 minutes
+  ) %>%
+  mutate(dwa_cond2=case_when(DWA01_num!=7 |DWA01_num !=9 |DWA01_num != 13 | DWA01_num != 96 |DWA01_num !=98 ~ 1,
+                             TRUE ~ 0) ## protected source
+  ) %>%
+  mutate(dwa_cond3=case_when(DWA04_num==1 ~ 0, TRUE ~ 1) ## drinking water was available in the last 30 days
+  ) %>%
+  mutate(outcome12_1=case_when(
+    (dwa_cond1==1 & dwa_cond2==1 & dwa_cond3==1) ~ 1, TRUE ~ 0)
+  ) %>%
+  mutate(outcome12_1 = labelled(outcome12_1,
+                                  labels = c(
+                                    "Yes" = 1,
+                                    "No" = 0
+                                  ),
+                                  label = "PoC using at least basic drinking water services"))
+
 ###12.2 Proportion of PoC with access to a safe household toilet
-##Module :TOI01-TOI05
+##Module :TOI01-TOI05 ##MICS calculation WS3.1/WS3.4
+
+main$TOI01_num <- labelled_chr2dbl(main$TOI01)
+main$TOI02_num <- labelled_chr2dbl(main$TOI02)
+main$TOI03_num <- labelled_chr2dbl(main$TOI03)
+main$TOI04_num <- labelled_chr2dbl(main$TOI04)
+main$TOI05_num <- labelled_chr2dbl(main$TOI05)
+
+main <- main %>%
+  mutate(toi_cond1=case_when(TOI01_num==1 |TOI01_num==2 | TOI01_num==3 | TOI01_num==4 |TOI01_num==5 |
+                               TOI01_num==6 | TOI01_num==7 | TOI01_num==9 ~ 1,
+                             TOI01_num==8 | TOI01_num==10 | TOI01_num==11 | TOI01_num==12 | TOI01_num==96 ~ 0,
+                             TRUE ~ NA_real_)
+  ) %>%
+  mutate(toi_cond2=case_when(
+    TOI02_num==1 & (TOI03_num==5 |TOI03_num==96) ~ 0, #Unsafe disposal
+    TOI02_num==1 & (TOI03_num==1 |TOI03_num==2 |TOI03_num==3 |TOI03_num==4| TOI03_num==98 ) ~ 1, #safe
+    TOI02_num==2 ~ 0, TOI02_num==98 ~ 1, TRUE ~ NA_real_)
+  ) %>%
+  mutate(toi_cond3=case_when(
+    TOI05_num==1 ~ 0, TOI05_num==0 ~ 1) # HH sharing toilet with other HHs
+  ) %>%
+
+
+### improved sanitation facility / safely disposed in situ / not shared with other HHs
+
+  mutate(outcome12_2=case_when(
+    toi_cond1==0 | toi_cond2==0 |toi_cond3==0 ~ 0,
+    TRUE ~ 1)
+  ) %>%
+  mutate(outcome12_2 = labelled(outcome12_2,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "PoC with access to a safe household toilet"))
+
+    
 
 ###13.1 Proportion of PoC with an account at a bank or other financial institution or with a mobile-money service provider
 ##Module :BANK01-BANK05
