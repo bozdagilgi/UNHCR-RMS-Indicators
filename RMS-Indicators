@@ -286,9 +286,7 @@ ind$EDU03_num <- labelled_chr2dbl(ind$EDU03)
                                "No"=0
                              ),
                              label="PoC enrolled in secondary education"))
- 
- 
- mean(ind$impact3_2b)
+
 
 ###3.3 Proportion of PoC feeling safe walking alone in their neighborhood
 ##Module :SAF01
@@ -752,18 +750,215 @@ main <- main %>%
 ###13.1 Proportion of PoC with an account at a bank or other financial institution or with a mobile-money service provider
 ##Module :BANK01-BANK05
 
+main$BANK01_num <- labelled_chr2dbl(main$BANK01)
+main$BANK02_num <- labelled_chr2dbl(main$BANK02)
+main$BANK03_num <- labelled_chr2dbl(main$BANK03)
+main$BANK04_num <- labelled_chr2dbl(main$BANK04)
+main$BANK05_num <- labelled_chr2dbl(main$BANK05)
+
+##include if the respondent has an account on their own/with someone else, ATM card, personal bank card
+##or personally used phone to send money (proxy)
+
+main <- main %>%
+  mutate(
+    outcome13_1 = case_when(
+      BANK01_num ==1 | BANK02_num== 1 | BANK03_num==1 |BANK05_num==1 ~ 1,
+      BANK01_num==0 & BANK02_num==0 & BANK03_num==0 & BANK04_num==0 ~ 0,
+      TRUE ~ 0)
+  ) %>%
+  mutate(outcome13_1 = labelled(outcome13_1,
+                            labels = c(
+                              "Yes" = 1,
+                              "No" = 0
+                            ),
+                            label = "PoC with an account at a bank or other financial institution or 
+                            with a mobile-money service provider")
+  )
+
 ###13.2 Proportion of PoC who self-report positive changes in their income compared to previous year
 ##Module :INC01
 
+### Only calculate as positive if they responded 'more' 
+
+main$INC01_num <- labelled_chr2dbl(main$INC01)
+
+main <- main %>%
+  mutate(outcome13_2=case_when(
+    INC01_num==1 ~ 1,
+    INC01_num==2 |INC01_num==3 |INC01_num==98 ~ 0 ) 
+  ) %>%
+  mutate(outcome13_2 = labelled(outcome13_2,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "PoC who self-report positive changes in their income compared
+                                to previous year")
+  )
+  
 ###13.3 Proportion of PoC (working age) who are unemployed
-##Module :UNEM01-UNEM010
+
+####Numerator: Those of working age who were not in employment, looked for employment in the past 30 days and were available to take up employment
+####Denominator: Those of working age in labour force
+
+###Turn into numeric variables
+
+main$UNEM01_num <- labelled_chr2dbl(main$UNEM01)
+main$UNEM02_num <- labelled_chr2dbl(main$UNEM02)
+main$UNEM03_num <- labelled_chr2dbl(main$UNEM03)
+main$UNEM04_num <- labelled_chr2dbl(main$UNEM04)
+main$UNEM05_num <- labelled_chr2dbl(main$UNEM05)
+main$UNEM06_num <- labelled_chr2dbl(main$UNEM06)
+main$UNEM07_num <- labelled_chr2dbl(main$UNEM07)
+main$UNEM08_num <- labelled_chr2dbl(main$UNEM08)
+main$UNEM09_num <- labelled_chr2dbl(main$UNEM09)
+main$UNEM10_num <- labelled_chr2dbl(main$UNEM10)
+
+
+main <- main %>%
+  mutate(employed=case_when(
+    UNEM01_num==1 ~ 1,
+    UNEM02_num==1 & UNEM07_num==3 ~ 1,
+    UNEM04_num==1 ~ 1,
+    UNEM02_num==1 & UNEM07_num==1 & (UNEM08_num==1 | UNEM08_num==2) ~ 1,
+    UNEM05_num==1 & UNEM06_num==3 ~ 1,
+    UNEM05_num==1 & (UNEM06_num==1 | UNEM06_num==2) & (UNEM08_num==1 | UNEM08_num==2) ~ 1)
+  ) %>%
+  mutate(unemployed=case_when(
+    employed==0 & UNEM09_num==1 & UNEM10_num==1 ~ 1,
+    TRUE ~ 0)
+  ) %>%
+  mutate(labour_force=case_when(
+    employed==1 | unemployed==1 ~ 1)
+  ) %>%
+  mutate(outcome13_3=unemployed/labour_force)
+    
+
 
 ###14.1 Proportion of returnees with legally recognized identity documents or credentials to support the return
 ##Module :REG01-REG06
 
+
+###DISAGGREGATE FOR RETURNEES ONLY 
+
+###Calculate having documents for children under 5
+
+##Turn into numeric variables 
+
+
+ind$REG05a_num <- labelled_chr2dbl(ind$REG05a) # passport
+ind$REG05b_num <- labelled_chr2dbl(ind$REG05b) # civil/government issued ID
+ind$REG05c_num <- labelled_chr2dbl(ind$REG05c) # residency permit
+ind$REG05d_num <- labelled_chr2dbl(ind$REG05d) # statelessness documentation
+ind$REG05e_num <- labelled_chr2dbl(ind$REG05e) # household card of address/family book
+ind$REG05f_num <- labelled_chr2dbl(ind$REG05f) # social security card
+ind$REG06_num <- labelled_chr2dbl(ind$REG06) # any other document establishes identity
+
+#add birth certificate as additional document from REG03
+ind <- ind %>%
+  mutate(document_under5=case_when(
+    REG05a_num==1 | REG05b_num==1 | REG05c_num==1 | REG05d_num==1 | REG05e_num==1 |
+      REG05f_num==1 |REG06_num==1 | birthCertificate==1 ~ 1, 
+    REG05a_num==0 & REG05b_num==0 & REG05c_num==0 & REG05d_num==0 & REG05e_num==0 &
+      REG05f_num==0 & REG06_num==0 & birthCertificate==0 ~ 0, TRUE ~ NA_real_
+  ))
+
+###Calculate having documents for above 5
+
+##Turn into numeric variables 
+
+
+ind$REG01a_num <- labelled_chr2dbl(ind$REG01a) # passport
+ind$REG01b_num <- labelled_chr2dbl(ind$REG01b) # birth certificate
+ind$REG01c_num <- labelled_chr2dbl(ind$REG01c) # civil/ government issued ID
+ind$REG01d_num <- labelled_chr2dbl(ind$REG01d) # residency permit
+ind$REG01e_num <- labelled_chr2dbl(ind$REG01e) # statelessness documentation
+ind$REG01f_num <- labelled_chr2dbl(ind$REG01f) # household card of address/family book
+ind$REG01g_num <- labelled_chr2dbl(ind$REG01g) # social security card
+ind$REG02_num <- labelled_chr2dbl(ind$REG02) # any other document establishes identity
+
+#add birth certificate as additional document from REG03
+ind <- ind %>%
+  mutate(document_above5=case_when(
+    REG01a_num==1 | REG01b_num==1 | REG01c_num==1 | REG01d_num==1 | REG01e_num==1 |
+      REG01f_num==1 | REG01g_num==1 |REG02_num==1 ~ 1,
+    REG01a_num==0 & REG01b_num==0 & REG01c_num==0 & REG01d_num==0 & REG01e_num==0 &
+      REG01f_num==0 & REG01g_num==0 & REG02_num==0 ~ 0, TRUE ~ NA_real_)
+    
+    ##calculate outcome indicator by combining under 5 and above 5 responses
+  ) %>%
+  mutate(outcome14_1=case_when(
+    (document_above5==1 | document_under5==1) ~ 1,  
+    (document_above5==0 | document_under5==0) ~ 0)
+  ) %>%
+  mutate(outcome14_1=labelled(outcome14_1,
+                             labels=c(
+                               'Yes'=1,
+                               'No'=0
+                             ),
+                             label="PoCs with legally recognized documents for returnees"))
+
+
+
 ###16.1 Proportion of PoC with secure tenure rights and/or property rights to housing and/or land
 ##Module :DWE06-DWE07 & DWE10-DWE11
+
+main$DWE06_num <- labelled_chr2dbl(main$DWE06)
+main$DWE07_num <- labelled_chr2dbl(main$DWE07)
+main$DWE10_num <- labelled_chr2dbl(main$DWE10)
+main$DWE11_num <- labelled_chr2dbl(main$DWE11)
+
+main <- main %>%
+  mutate(housing_cond1=case_when(
+         (DWE11_num==1 | DWE11_num==2 ) ~ 1, # likelihood of losing right for housing is unlikely
+         TRUE ~ 0)
+  ) %>%
+  mutate(housing_cond2=case_when(
+    DWE10_num==96~ 0, # have official documents to proof residency
+    DWE10_num==1 | DWE10_num==2 |  DWE10_num==3 | DWE10_num==4 | DWE10_num==5 | DWE10_num==6 ~ 1)
+  ) %>%
+  mutate(housing_cond3=case_when(
+    DWE06_num==9 | DWE07_num==9 ~ 0, # not un-owned or not squatting
+    TRUE ~ 1)
+  ) %>%
+  mutate(outcome16_1=case_when(
+    housing_cond1==1 & housing_cond2==1 & housing_cond3==1 ~ 1,
+    housing_cond1==0 | housing_cond2==0 | housing_cond3==0 ~ 0)
+  ) %>%
+  mutate(outcome16_1=labelled(outcome16_1,
+                             labels=c(
+                               'Yes'=1,
+                               'No'=0
+                             ),
+                             label="PoC with secure tenure rights and/or property rights
+                             to housing and/or land"))
+
 
 ###16.2 Proportion of PoC covered by social protection floors/systems
 ##Module :UNHCR Core Indicator Metadata	SPF01
 
+
+##Turn into numeric variables
+
+main$SPF01a_num <- labelled_chr2dbl(main$SPF01a)
+main$SPF01b_num <- labelled_chr2dbl(main$SPF01b)
+main$SPF01c_num <- labelled_chr2dbl(main$SPF01c)
+main$SPF01d_num <- labelled_chr2dbl(main$SPF01d)
+main$SPF01e_num <- labelled_chr2dbl(main$SPF01e)
+main$SPF01f_num <- labelled_chr2dbl(main$SPF01f)
+main$SPF01g_num <- labelled_chr2dbl(main$SPF01g)
+main$SPF01h_num <- labelled_chr2dbl(main$SPF01h)
+# If PoC has covered by at least one of the social protection floors/systems
+main <- main %>%
+  mutate(outcome16_2=case_when(
+    SPF01a_num==1 |SPF01b_num==1 |SPF01c_num==1 |SPF01d_num==1 | SPF01e_num==1 | SPF01f_num==1 
+     | SPF01g_num==1 | SPF01h_num==1 ~ 1, 
+    TRUE ~ 0)
+  ) %>%
+  mutate(outcome16_2=labelled(outcome16_2,
+                              labels=c(
+                                'Yes'=1,
+                                'No'=0
+                              ),
+                              label="PoC covered by social protection floors/systems")) 
+    
