@@ -142,7 +142,7 @@ main <- main %>%
 
 main <- main %>%
   
-  mutate(crowding=DWE05/HH01
+  mutate(crowding=HH01/DWE05
   ) %>%
   mutate(dwe05_cat=case_when( ##if crowding < 3 
     crowding < 3 ~ 1, TRUE ~ 0)
