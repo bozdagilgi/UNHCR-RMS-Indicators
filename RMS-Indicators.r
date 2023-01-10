@@ -719,8 +719,8 @@ table(main$impact3_3, useNA = "ifany")
   ##If yes selected for any of the circumstances
  main <- main %>%
    mutate(outcome4_2=case_when(
-     VAW01a_num==1 | VAW01b_num==1 |  VAW01c_num==1 |  VAW01d_num==1 | VAW01e_num==1 ~ 1,
-     VAW01a_num==0 & VAW01b_num==0 &  VAW01c_num==0 &  VAW01d_num==0 & VAW01e_num==0 ~ 0,
+     VAW01a_num==1 | VAW01b_num==1 |  VAW01c_num==1 |  VAW01d_num==1 | VAW01e_num==1 ~ 0,
+     VAW01a_num==0 & VAW01b_num==0 &  VAW01c_num==0 &  VAW01d_num==0 & VAW01e_num==0 ~ 1,
      TRUE ~ NA_real_)
    ) %>%
    mutate(outcome4_2=labelled(outcome4_2,
@@ -831,7 +831,7 @@ main <- main %>%
   mutate(crowding=DWE05/HH01
   ) %>%
   mutate(dwe05_cat=case_when( ##if crowding < 3
-    crowding < 3 ~ 1, TRUE ~ 0)
+    crowding < 0.333 ~ 1, TRUE ~ 0)
   )
 
 ## Add DWE08 and DWE09 to calculations - if HH is paying rent, can they afford to pay rent without financial distress

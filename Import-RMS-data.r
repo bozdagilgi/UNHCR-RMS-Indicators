@@ -5,9 +5,9 @@ rm(list=ls()) # clear work space
 
 ## install Packages
 
-install.packages('robotoolbox')
-install.packages("remotes")
-remotes::install_github("dickoa/robotoolbox")
+# install.packages('robotoolbox')
+# install.packages("remotes")
+# remotes::install_github("dickoa/robotoolbox")
 
 
 library(haven)
@@ -24,33 +24,41 @@ library(dm)
 
 ### insert your username from kobo/UNHCR
 
-kobo_token(username = "XXXX",
-           password = "XXXX",
-           url = "https://kobo.unhcr.org")
+## Or set thisup within your environement variable
 
+#  edit directly the .Renviron file or access it by calling usethis::edit_r_environ() (assuming you have the usethis package installed)
+# and entering the following two lines:
+#
+# KOBOTOOLBOX_URL="https://kobo.unhcr.org/"
+# KOBOTOOLBOX_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxx
 
-### enter your token
-
-kobo_setup(url = "https://kobo.unhcr.org",
-           token = "XXXXXXXXXXXXXXX")
+# kobo_token(username = "XXXX",
+#            password = "XXXX",
+#            url = "https://kobo.unhcr.org")
+#
+#
+# ### enter your token
+#
+# kobo_setup(url = "https://kobo.unhcr.org",
+#            token = "XXXXXXXXXXXXXXX")
 
 ### access data - enter name here
 
 kobo_asset_list()
 
 asset_list <- kobo_asset_list()
-uid <- filter(asset_list, name == "RMS CAPI v2") |>
-  pull(uid)
-asset <- kobo_asset(uid)
+# uid <- filter(asset_list, name == "RMS CAPI v2") |>
+#   pull(uid)
+asset <- kobo_asset("aM4SnZ43SSxXEh8HecqUzh")
 asset
-  
+
 
 df <- kobo_data(asset)
 df
 
 
 ### merge repeat group questions into household dataset
-       
+
 glimpse(df$main)
 glimpse(df$S1)
 glimpse(df$S2)
@@ -60,9 +68,10 @@ glimpse(df$P2.S3)
 
 main <- df$main
 S1 <- df$S1 ##HH roster
-S2 <- df$S2 ##individidual
-P2 <- df$P2.S3 ##children education
-rm(list="df")
+
+##S2 <- df$S2 ##individidual
+#P2 <- df$P2.S3 ##children education
+#rm(list="df")
 
 #### get dimensions of datasets above
 
@@ -71,21 +80,21 @@ dim(S1)
 dim(S2)
 dim(P2)
 
-### merge all individual datasets 
+### merge all individual datasets
+ind <- S1
+# ind_merge <- merge(S1,S2, by=c("_index","_parent_index"))
+# ind <- merge (ind_merge, P2, by=c("_index", "_parent_index"))
+#
+#
+# ###Removed unused datasets
+#
+# rm(ind_merge)
+# rm(P2)
+# rm(S1)
+# rm(S2)
 
-ind_merge <- merge(S1,S2, by=c("_index","_parent_index"))
-ind <- merge (ind_merge, P2, by=c("_index", "_parent_index"))
 
-
-###Removed unused datasets
-
-rm(ind_merge)
-rm(P2)
-rm(S1)
-rm(S2)
-
-
-###Create function that turn character values into numeric 
+###Create function that turn character values into numeric
 
 labelled_chr2dbl <- function(x) {
   varlab <- var_label(x)
@@ -116,18 +125,18 @@ mutate( # primary citizenship from REF01 and REF02
 ###Calculate age groups for disaggregation for ind and main dataset
 
 
-ind$HH07_cat <- cut(ind$HH07, 
+ind$HH07_cat <- cut(ind$HH07,
                     breaks = c(-1, 4, 17, 59, Inf),
                     labels = c("0-4", "5-17", "18-59", "60+"))
 
-
+table(ind$HH07_cat, useNA = "ifany")
 
 ### Disability for disaggregation ind dataset
 ####Calculated based on WG suggestions : https://www.washingtongroup-disability.com/fileadmin/uploads/wg/Documents/WG_Document__5C_-_Analytic_Guidelines_for_the_WG-SS__Stata_.pdf
 
-##Step.1 Create variable for calculating disability 
-
-
+##Step.1 Create variable for calculating disability
+names(main)
+names(ind)
 
 ind <-  ind %>%
   mutate( # disability identifier variables according to Washington Group standards
@@ -137,7 +146,7 @@ ind <-  ind %>%
     disaux4_234 = DIS04 %in% c("2","3","4"),
     disaux5_234 = DIS05 %in% c("2","3","4"),
     disaux6_234 = DIS06 %in% c("2","3","4"),
-    
+
     disaux1_34 = DIS01 %in% c("3","4"), # indicator variables for all 6 domains with value TRUE if A LOT OF DIFFICULTY or CANNOT DO AT ALL
     disaux2_34 = DIS02 %in% c("3","4"),
     disaux3_34 = DIS03 %in% c("3","4"),
@@ -148,7 +157,7 @@ ind <-  ind %>%
   mutate(
     disSum234 = rowSums(select(., disaux1_234, disaux2_234 , disaux3_234 , disaux4_234 , disaux5_234 , disaux6_234)), # count number of TRUE indicator variables over 6 domains
     disSum34 = rowSums(select(., disaux1_34, disaux2_34 , disaux3_34 , disaux4_34 , disaux5_34 , disaux6_34)) # count number of TRUE indicator variables over 6 domains
-    
+
   ) %>%
   mutate(
     DISABILITY1 = case_when( # : the level of inclusion is at least one domain/question is coded SOME DIFFICULTY or A LOT OF DIFFICULTY or CANNOT DO AT ALL.
@@ -207,10 +216,10 @@ ind <-  ind %>%
                              "Unknown" = 98
                            ),
                            label = "Washington Group disability identifier 4"))
-###Calculate having at least one disability identifier among 4 categories 
+###Calculate having at least one disability identifier among 4 categories
 ind <- ind %>%
   mutate(disab=
-           case_when(DISABILITY1==1 | DISABILITY2==1 | DISABILITY3==1 | DISABILITY4==1 ~ 1, 
+           case_when(DISABILITY1==1 | DISABILITY2==1 | DISABILITY3==1 | DISABILITY4==1 ~ 1,
                                DISABILITY1==0 | DISABILITY2==0 | DISABILITY3==0 | DISABILITY4==0 ~ 0,
                                TRUE ~ NA_real_)
    ) %>%
@@ -258,7 +267,7 @@ rm(main_m)
 
 ### Household head in main dataset is HH07 for age and HH04 for gender
 
-main$HH07_cat <- cut(main$HH07, 
+main$HH07_cat <- cut(main$HH07,
                      breaks = c(-1, 4, 17, 59, Inf),
                      labels = c("0-4", "5-17", "18-59", "60+"))
 
