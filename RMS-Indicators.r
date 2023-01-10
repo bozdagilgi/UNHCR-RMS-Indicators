@@ -408,7 +408,7 @@ table(main$dwe04_cat, useNA = "ifany")
 main <- main %>%
   mutate(crowding=DWE05/HH01   ) %>%
   ##if crowding < 3
-  mutate(dwe05_cat=case_when( crowding < 3 ~ 1, TRUE ~ 0)   )
+  mutate(dwe05_cat=case_when( crowding < 0.333 ~ 1, TRUE ~ 0)   )
 
 ## Add DWE08 and DWE09 to calculations -
 # if HH is paying rent, can they afford to pay rent without financial distress
