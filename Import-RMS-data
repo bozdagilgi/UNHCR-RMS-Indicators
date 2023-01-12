@@ -1,15 +1,13 @@
-#####RMS Standard Scripts####
 
-rm(list=ls()) # clear work space
+###############################################################
+#########RMS-to-RBM:Data Preparation###########################
+###############################################################
 
+###Install Packages
 
-## install Packages
-
-install.packages('robotoolbox')
 install.packages("remotes")
+install.packages("DiagrammeR")
 remotes::install_github("dickoa/robotoolbox")
-
-
 library(haven)
 library(tidyverse)
 library(readxl)
@@ -19,115 +17,215 @@ library(robotoolbox)
 library(labelled)
 library(remotes)
 library(dm)
+library(janitor)
+library(dplyr)
+library(DiagrammeR)
 
-####Data import from Kobo#####
+##Clear environment, if needed
+rm(list = ls())
 
-### insert your username from kobo/UNHCR
+###Import data from KoBo
 
-kobo_token(username = "XXXX",
-           password = "XXXX",
+kobo_token(username = "ilgibozdag",
+           password = "Suis*908",
            url = "https://kobo.unhcr.org")
 
 
-### enter your token
-
 kobo_setup(url = "https://kobo.unhcr.org",
-           token = "XXXXXXXXXXXXXXX")
-
-### access data - enter name here
-
-kobo_asset_list()
+           token = "c7d7e14e1a33cb89f7681f0cb7d5010182ebc974")
 
 asset_list <- kobo_asset_list()
-uid <- filter(asset_list, name == "RMS CAPI v2") |>
+uid <- filter(asset_list, name == "RMS CAPI v2") |> ## change the name accordingly
   pull(uid)
 asset <- kobo_asset(uid)
 asset
-  
 
 df <- kobo_data(asset)
 df
 
+## Get individual tables from the DM object if needed
 
-### merge repeat group questions into household dataset
-       
+main <- pull_tbl(df, main, keyed = TRUE)
+S1 <- pull_tbl(df, S1, keyed = TRUE)
+S2 <- pull_tbl(df, S2, keyed = TRUE)
+P2.S3 <- pull_tbl(df, P2.S3, keyed = TRUE)
+
+
+
 glimpse(df$main)
 glimpse(df$S1)
 glimpse(df$S2)
 glimpse(df$P2.S3)
 
+####Data cleaning before merge
+
+###1. Check duplicates
+
+duplicated(main) # Check if there are any duplicates
+sum(duplicated(main)) # Number of duplicates
 
 
-main <- df$main
-S1 <- df$S1 ##HH roster
-S2 <- df$S2 ##individidual
-P2 <- df$P2.S3 ##children education
-rm(list="df")
+duplicated(S1) # Check if there are any duplicates
+sum(duplicated(S1)) #Number of duplicates
 
-#### get dimensions of datasets above
+get_dupes(main)
+get_dupes(S1)
 
-dim(main)
-dim(S1)
-dim(S2)
-dim(P2)
+###2. Check HH head 
 
-### merge all individual datasets 
+s1.oldestHHM <- S1 |> # find oldest HH member per HH
+  group_by(`_parent_index`) |>
+  slice_max(HH07, with_ties = FALSE) |>
+  ungroup() |>
+  mutate(oldestHHM = 1) |>
+  select(`_index`, oldestHHM)
 
-ind_merge <- merge(S1,S2, by=c("_index","_parent_index"))
-ind <- merge (ind_merge, P2, by=c("_index", "_parent_index"))
+s1.oldestHead <- S1 |> # find oldest head of household per HH
+  filter(HH03 == "1") |>
+  group_by(`_parent_index`) |>
+  slice_max(HH07, with_ties = FALSE) |>
+  ungroup() |>
+  mutate(oldestHead = 1) |>
+  select(`_index`, oldestHead)
+
+S1 <- S1 |>
+  left_join(s1.oldestHHM) |>
+  left_join(s1.oldestHead) |>
+  group_by(`_parent_index`) |>
+  mutate(
+    householdHead = case_when(
+      sum(HH03 == "1") == 1 & HH03 == "1" ~ 1,
+      sum(HH03 == "1") == 1 & HH03 != "1" ~ 0,
+      sum(HH03 == "1") == 0 & oldestHHM == 1 ~ 1,
+      sum(HH03 == "1") == 0 & is.na(oldestHHM) ~ 0,
+      sum(HH03 == "1") > 1 & HH03 == "1" & oldestHead == 1 ~ 1,
+      sum(HH03 == "1") > 1 & HH03 == "1" & is.na(oldestHead) ~ 0,
+      sum(HH03 == "1") > 1 & HH03 != "1"  ~ 0
+    )) |>
+  mutate(
+    householdHead = labelled(householdHead,
+                             labels = c(
+                               "Head of household" = 1,
+                               "Not head of household" = 0
+                             ),
+                             label = "Head of household")) |>
+  ungroup()
+
+table(S1$householdHead) # Double check if you have any 0
+
+###3.Check HH size
+
+##Check HH size
 
 
-###Removed unused datasets
-
-rm(ind_merge)
-rm(P2)
-rm(S1)
-rm(S2)
+main %>%
+  count(HH01)
 
 
-###Create function that turn character values into numeric 
+count()
+main$HH01
 
-labelled_chr2dbl <- function(x) {
-  varlab <- var_label(x)
-  vallab <- val_labels(x)
-  vallab <- setNames(as.numeric(vallab),
-                     names(vallab))
-  x <- as.numeric(as.character(x))
-  var_label(x) <- varlab
-  val_labels(x) <- vallab
-  x
-}
+main |>
+  summarise(avg_hh_size = mean(HH01, na.rm = TRUE),
+            med_hh_size = median(HH01, na.rm = TRUE))
+
+##Check HH size in individual dataset
+S1 |>
+  add_count(`_parent_index`, name = "hhsize") |>
+  select(`_index`, `_parent_index`, hhsize)
 
 
-####Calculate primary citizenship for individual dataset
-ind <- ind %>%
+### adding it back, by zooming in the S1 table
+raw <- raw |>
+  dm_zoom_to(S1) |>
+  count(`_parent_index`, name = "hhsize") |>
+  dm_insert_zoomed("S1_hhsize")
 
-mutate( # primary citizenship from REF01 and REF02
-  citizenship_com = case_when(
-    REF01 == "1" ~ "ZAF", ##here enter the country code of enumeration
-    REF01 %in% c("0", "98") ~ as.character(ind$REF02),
-    REF01 == "99" ~ "99"
-  )
-) %>%
-  mutate(citizenship_com = labelled(citizenship_com,
+## Merge count to the main table
+df <- df |>
+  dm_zoom_to(main) |>
+  left_join(S1_hhsize) |>
+  dm_update_zoomed()
+
+
+### Check
+df |>
+  pull_tbl(main) |>
+  select(`_index`, HH01, hhsize) |>
+  mutate(diff = abs(HH01 - hhsize) > 1e-6)
+
+### Check whether we have some difference, if any
+raw |>
+  pull_tbl(main) |>
+  select(`_index`, HH01, hhsize) |>
+  mutate(diff = abs(HH01 - hhsize) > 1e-6) |>
+  filter(diff)
+#################################
+####Merge all individual datasets
+#################################
+
+#Check repeat group datasets
+dm_draw(df)
+
+### Check the columns
+glimpse(df)
+
+##
+dm_nrow(df)
+
+main <- pull_tbl(df, main, keyed = FALSE)
+S1 <- pull_tbl(df, S1, keyed = FALSE)
+S2 <- pull_tbl(df, S2, keyed = FALSE)
+P2.S3 <- pull_tbl(df, P2.S3, keyed = FALSE)
+
+##Merge all individual level datasets into one single individual dataset
+
+S1 <- pull_tbl(df, S1, keyed = FALSE)
+S2 <- pull_tbl(df, S2, keyed = FALSE)
+P2.S3 <- pull_tbl(df, P2.S3, keyed = FALSE)
+
+ind <- S1 |>
+  left_join(S2, by = c("_index", "_parent_index")) |>
+  left_join(P2.S3, by = c("_index", "_parent_index"))
+
+###Remove datasets that are not needed
+
+rm(asset,asset_list,df,P2.3,S1,s1.oldestHead, s1.oldestHHM, S2, P2.S3)
+
+
+#####Calculate disaggregation variables
+
+
+####1. Primary citizenship
+
+
+ind <- ind |>
+  mutate( # primary citizenship from REF01 and REF02
+    citizenship = case_when(
+      REF01 == "1" ~ "XXX", ##here enter the country code (where RMS took place)
+      REF01 %in% c("0", "98") ~ as.character(ind$REF02),
+      REF01 == "99" ~ "99"
+    )
+  ) |>
+  mutate(citizenship = labelled(citizenship,
                                 labels = val_labels(ind$REF02),
                                 label = var_label(ind$REF02)))
+table(ind$citizenship)
 
-###Calculate age groups for disaggregation for ind and main dataset
+#####2. Age groups
 
-
-ind$HH07_cat <- cut(ind$HH07, 
+ind$HH07_cat <- cut(ind$HH07,
                     breaks = c(-1, 4, 17, 59, Inf),
                     labels = c("0-4", "5-17", "18-59", "60+"))
+ind$HH07_cat2 <- cut(ind$HH07 ,
+                     breaks = c(-1, 17, Inf),
+                     labels = c("0-17", "18-60+"))
+
+table(ind$HH07_cat)
+table(ind$HH07_cat2)
 
 
-
-### Disability for disaggregation ind dataset
-####Calculated based on WG suggestions : https://www.washingtongroup-disability.com/fileadmin/uploads/wg/Documents/WG_Document__5C_-_Analytic_Guidelines_for_the_WG-SS__Stata_.pdf
-
-##Step.1 Create variable for calculating disability 
-
-
+###3. Disability
 
 ind <-  ind %>%
   mutate( # disability identifier variables according to Washington Group standards
@@ -211,54 +309,50 @@ ind <-  ind %>%
 ind <- ind %>%
   mutate(disab=
            case_when(DISABILITY1==1 | DISABILITY2==1 | DISABILITY3==1 | DISABILITY4==1 ~ 1, 
-                               DISABILITY1==0 | DISABILITY2==0 | DISABILITY3==0 | DISABILITY4==0 ~ 0,
-                               TRUE ~ NA_real_)
-   ) %>%
+                     DISABILITY1==0 | DISABILITY2==0 | DISABILITY3==0 | DISABILITY4==0 ~ 0,
+                     TRUE ~ NA_real_)
+  ) %>%
   mutate(disab = labelled(disab,
-                           labels = c(
-                             "Without disability" = 0,
-                             "With disability" = 1)
-                           ))
-## Merge for below variables for disaggregation
-
-##citizenship_com : Citizenship
-##HH07_CAT : Age categories
-##HH04 : Gender
-##disab : Disability status
-##pop_groups:Population group
+                          labels = c(
+                            "Without disability" = 0,
+                            "With disability" = 1)
+  ))
+table(ind$disab)
 
 
-####Merge datasets to have variables above in both datasets
+###Below indicators will be used to disaggregate during the analysis.
+##Country of origin : `citizenship`
+##Age categories : `HH07_cat` and `HH07_cat2`
+##Gender : `HH04`
+##Population groups: `pop_groups`
 
-## Import individual level variables to HH dataset to analyse sampled adult question
+table(main$pop_groups)
+table(ind$HH04)
 
 
-###Create similar variable names for merging with the individual dataset
 
-main$HH02 <- main$name_selectedadult18
-main$HH07 <- main$name_selectedadult18_age
-main$"_parent_index" <- main$"_index"
+########Create similar variable names to get the data on randomly selected adult
 
-##Select indicators for merge
+main$HH02 <- main$name_selectedadult18 #name of randomly selected adult
+main$HH07 <- main$name_selectedadult18_age #age of randomly selected adult
+main$"_parent_index" <- main$"_index" #merge variable from kobo
+
+##Create a new dataset with indicators for merge, below you can add all indicators you want to import from individual dataset
 
 ind_m <- ind %>%
-  select("_parent_index", "HH07_cat", "disab", "citizenship_com","HH02", "HH07", "HH04") ##ADD VARIABLES FOR MERGING
-main <- merge(ind_m, main, by=c("HH02", "HH07", "_parent_index"))
+  select("_parent_index", "HH07_cat", "HH07_cat2", "disab", "citizenship","HH02", "HH07", "HH04") 
+
+
+main <- left_join(main, ind_m,
+                  by = c("HH02", "HH07", "_index" = "_parent_index"))
 
 rm(ind_m)
 
-## Import HH level variables from individual dataset
 
+##Create a new dataset with the indicators that you want to import
 main_m <- main %>%
-  select("_parent_index", "pop_groups", "end_result") ## ADD VARIABLES FOR MERGING
+  select(`_parent_index`, pop_groups, end_result) ## add variables here
 
-ind <- merge(main_m, ind, by = "_parent_index")
+ind <- left_join(main_m, ind, by = "_parent_index")
 
 rm(main_m)
-
-### Household head in main dataset is HH07 for age and HH04 for gender
-
-main$HH07_cat <- cut(main$HH07, 
-                     breaks = c(-1, 4, 17, 59, Inf),
-                     labels = c("0-4", "5-17", "18-59", "60+"))
-
