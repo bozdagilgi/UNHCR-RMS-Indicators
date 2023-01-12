@@ -26,13 +26,13 @@ rm(list = ls())
 
 ###Import data from KoBo
 
-kobo_token(username = "ilgibozdag",
-           password = "Suis*908",
+kobo_token(username = "XXXXX",
+           password = "XXXXX",
            url = "https://kobo.unhcr.org")
 
 
 kobo_setup(url = "https://kobo.unhcr.org",
-           token = "c7d7e14e1a33cb89f7681f0cb7d5010182ebc974")
+           token = "XXXXXXXXXXXXXXXXXXX")
 
 asset_list <- kobo_asset_list()
 uid <- filter(asset_list, name == "RMS CAPI v2") |> ## change the name accordingly
