@@ -1,0 +1,555 @@
+###########RMS Qv3 Data Preparation############
+##########UNHCR
+#########Author: Ilgi Bozdag
+
+##Clear environment, if needed
+rm(list = ls())
+
+
+#### Load packages
+
+#install
+install.packages('visdat')
+install.packages("remotes")
+install.packages("DiagrammeR")
+install.packages('dplyr')
+remotes::install_github("dickoa/robotoolbox")
+
+
+##load
+library(haven)
+library(tidyverse)
+library(readxl)
+library(srvyr)
+library(ggplot2)
+library(robotoolbox)
+library(labelled)
+library(remotes)
+library(dm)
+library(janitor)
+library(visdat)
+library(dplyr)
+library(writexl)
+
+
+####Once you load all packages, you can import your data directly from KoBO.
+
+###Insert your username and password from UNHCR Kobo server. 
+####Note that you need to have access to the survey from your account to be able to upload it directly
+
+
+
+###Enter your KoBo username and password
+kobo_token(username = "XXX",
+           password = "XXX",
+           url = "https://kobo.unhcr.org")
+
+
+###Once you enter, you will receive your token from KoBO which you need to insert as below
+
+kobo_setup(url = "https://kobo.unhcr.org",
+           token = "XXXX")
+
+###Run the script below to see list of your surveys 
+asset_list <- kobo_asset_list()
+
+asset_list
+
+##Find the survey you want to analyse and enter the name as below 
+
+uid <- filter(asset_list, name == "RMS CAPI v3") |> ## change the name accordingly
+  pull(uid)
+
+###You will see the number of submissions and name. 
+
+asset <- kobo_asset(uid)
+asset
+
+
+###Your data frame will be displayed here without the need for you to download it from KoBo
+df <- kobo_data(asset)
+df
+
+## Get individual tables from data frame object if needed
+
+main <- pull_tbl(df, main, keyed = TRUE)
+S1 <- pull_tbl(df, S1, keyed = TRUE)
+S2_repeat <- pull_tbl(df, S2_repeat, keyed = TRUE)
+
+
+####As a second option, you can import datasets directly in R
+###If you do so, please make sure to download your data from KoBo by selecting options as below:
+######1. Select export type: XLS
+######2. Value and Header format: XML values and headers
+
+
+####RMS dataset will have 2 other sheets due to individual level questions. 
+####Export them separately by precising the name of the sheet as below
+
+library(readxl)
+main <- read_excel("Enter file path")
+S1 <- read_excel("Enter file path", 
+                 sheet = "S1")
+S2_repeat <- read_excel("Enter file path", 
+                    sheet = "S2_repeat")
+
+
+
+#####At this step, you should already have your dataset uploaded as below
+###Please use the same variable names, otherwise this script won't work
+
+glimpse(df$main)
+glimpse(df$S1)
+glimpse(df$S2_repeat)
+
+
+
+
+#################################
+####Review your datasets 
+#################################
+
+#Check repeat group datasets
+dm_draw(df)
+
+### Check the columns
+glimpse(df)
+
+##Check number of entries in each sheet
+dm_nrow(df)
+
+
+#### You can pull below three datasets
+
+main <- pull_tbl(df, main, keyed = FALSE)
+S1 <- pull_tbl(df, S1, keyed = FALSE)
+S2_repeat <- pull_tbl(df, S2_repeat, keyed = FALSE)
+
+##Merge all individual level dataset into one single individual dataset
+
+S1 <- pull_tbl(df, S1, keyed = FALSE)
+S2_repeat <- pull_tbl(df, S2_repeat, keyed = FALSE)
+
+ind <- S1 |>
+  left_join(S2_repeat, by = c("_index", "_parent_index")) 
+
+
+#Now you should have only two datasets one is called 'main' for household level questions 
+###and other one is called 'ind' for individual level questions
+
+
+###Remove all other datasets that are not needed
+
+rm(asset,asset_list,df,P2.3,S1, S2_repeat)
+
+
+####ind cleaning 
+
+###Before you start creating variables for further disaggregation, DO THE PRIMARY DATA CLEANING (missing values, duplicates)
+###You can get inspired from below steps to help you with your primary cleaning
+###You will continue with data cleaning once you create your disaggregation variables 
+
+
+###Step 1. Check duplicates
+
+duplicated(main) # Check if there are any duplicates
+sum(duplicated(main)) # Number of duplicates
+
+
+duplicated(ind) # Check if there are any duplicates
+sum(duplicated(ind)) #Number of duplicates
+
+get_dupes(main)
+get_dupes(ind)
+
+
+###DELETE IF YOU HAVE ANY DUPLICATES!
+
+##Step 2. Check for missing data
+####R provides functions like is.na(), complete.cases(), and na.omit() for handling missing values. 
+###The tidyr package's drop_na() function is also useful for removing rows with missing data
+###Check for certain variables to see if there are any missing values
+
+###Missing ind Analysis: Visualize the extent of missing ind using bar charts or heatmaps to identify patterns of missingness.
+
+# Example of a missing ind heatmap using the `visdat` package
+
+
+vis_dat(main)
+
+
+#####Calculate disaggregation variables
+
+####Calculate population groups from the mobility section to confirm population group
+### If you were surveying internally displaced persons, you can run the code below and compare with the actual
+##population groups entered at the beginning
+
+
+
+
+####IDPs 
+
+###EGRISS defines IDPs as those who have been forcibly displaced , including preventative movements, by:
+###Armed conflit; generalised violence; violations of human rights; natural or human-made disasters; other forced displacement or evictions
+
+
+table(ind$IDP01_1) # Armed conflict
+table(ind$IDP01_2) # Generalised Violence
+table(ind$IDP01_3) # Persecution and or violations of human rights
+table(ind$IDP01_4) # Natural or human-made disasters
+table(ind$IDP01_5) # Other forced displacement or evictions
+table(ind$IDP01_6) # Other voluntary movements
+table(ind$IDP01_7) # Never moved home while in ${countryname}
+table(ind$IDP01_98) # Don't know
+table(ind$IDP01_99) # Prefer not to respond
+
+ind <- ind %>%
+  mutate(idp_valid=
+           case_when(IDP01_1==1 | IDP01_2==1 | IDP01_3==1 | IDP01_4==1 | IDP01_5==1 ~ 1, 
+                     IDP01_6==0 | IDP01_7==0 ~ 0,
+                     TRUE ~ NA_real_)
+  ) %>%
+  mutate(idp_valid = labelled(idp_valid,
+                              labels = c(
+                                "Not an internally displaced person" = 0,
+                                "Internatlly displaced person" = 1)
+                              
+  ))
+
+
+
+
+###Check the results and compare with population group selected for the household for ind cleaning
+table(ind$idp_valid)
+
+
+####Refugees and Asylum Seekers
+
+###You should check the primary citizenship of all household members and confirm that 
+####refugees and asylum seekers are citizens of the country of enumeration
+
+###Primary citizenship
+
+
+ind <- ind |>
+  mutate( # primary citizenship from REF01 and REF02
+    citizenship = case_when(
+      REF01 == "1" ~ "XXX", ##here enter the country code (where RMS took place)
+      REF01 %in% c("0", "98") ~ as.character(ind$REF02),
+      REF01 == "99" ~ "99"
+    )
+  ) |>
+  mutate(citizenship = labelled(citizenship,
+                                labels = val_labels(ind$REF02),
+                                label = var_label(ind$REF02)))
+table(ind$citizenship)
+
+#####Age groups
+
+ind$HH07_cat <- cut(ind$HH07,
+                    breaks = c(-1, 4, 17, 59, Inf),
+                    labels = c("0-4", "5-17", "18-59", "60+"))
+ind$HH07_cat2 <- cut(ind$HH07 ,
+                     breaks = c(-1, 17, Inf),
+                     labels = c("0-17", "18-60+"))
+
+table(ind$HH07_cat)
+table(ind$HH07_cat2)
+
+
+### Disability
+
+####The calculation for this section is standard. For more details, please refer here: https://www.washingtongroup-disability.com/fileadmin/uploads/wg/WG_Document__7A_-_Analytic_Guidelines_for_the_WG-SS_Enhanced__SPSS_.pdf
+
+###Step 1: Generate frequency distributions on each of the six WG-SS domain variables
+
+### 1	No difficulty
+### 2	Some difficulty
+### 3	A lot of difficulties
+### 4	Cannot do at all
+### 98	Don’t know
+### 99	Prefer not to respond
+
+#Vision
+barplot(table(ind$DIS01), main = "Vision")
+#Hearing
+barplot(table(ind$DIS02), main = "Hearing")
+#Mobility
+barplot(table(ind$DIS03), main = "Mobility")
+#Communication
+barplot(table(ind$DIS04), main = "Communication")
+#Self-care
+barplot(table(ind$DIS05), main = "Self-care")
+#Cognition
+barplot(table(ind$DIS06), main = "Cognition")
+
+
+#######Step 2. Codes (99) Prefer not to respond and (98) Don’t know, are recoded to Missing.
+
+
+#######Create function that turn character values into numeric if you imported your ind from KobO
+
+labelled_chr2dbl <- function(x) {
+  varlab <- var_label(x)
+  vallab <- val_labels(x)
+  vallab <- setNames(as.numeric(vallab),
+                     names(vallab))
+  x <- as.numeric(as.character(x))
+  var_label(x) <- varlab
+  val_labels(x) <- vallab
+  x
+}
+
+##Check your variable if it's numeric
+class(ind$DIS01)
+
+###Turn all character variables into numeric
+
+ind$DIS01 <- labelled_chr2dbl(ind$DIS01)
+ind$DIS02 <- labelled_chr2dbl(ind$DIS02)
+ind$DIS03 <- labelled_chr2dbl(ind$DIS03)
+ind$DIS04 <- labelled_chr2dbl(ind$DIS04)
+ind$DIS05 <- labelled_chr2dbl(ind$DIS05)
+ind$DIS06 <- labelled_chr2dbl(ind$DIS06)
+
+##Check your variable again to confirm if itis now numeric
+class(ind$DIS01)
+
+# Replace "98"  and "99" with "NA" using dplyr
+
+ind <- ind %>%
+  mutate(
+    DIS01 = ifelse(DIS01 == 98 | DIS01 == 99, NA, DIS01),
+    DIS02 = ifelse(DIS02 == 98 | DIS02 == 99, NA, DIS02),
+    DIS03 = ifelse(DIS03 == 98 | DIS03 == 99, NA, DIS03),
+    DIS04 = ifelse(DIS04 == 98 | DIS04 == 99, NA, DIS04),
+    DIS05 = ifelse(DIS05 == 98 | DIS05 == 99, NA, DIS05),
+    DIS06 = ifelse(DIS06 == 98 | DIS06 == 99, NA, DIS06)
+  )
+
+
+####Double check for missing values
+
+frequencies_DIS01 <- table(ind$DIS01, useNA = "ifany")
+print(frequencies_DIS01)
+
+
+
+####Create disability status indicator for the Washington Group short set on disability
+
+
+ind$disability<- 0
+
+ind <- ind %>%
+  mutate(disability = ifelse(
+    DIS01 %in% c(3, 4) |
+      DIS02 %in% c(3, 4) |
+      DIS03 %in% c(3, 4) |
+      DIS04 %in% c(3, 4) |
+      DIS05 %in% c(3, 4) |
+      DIS06 %in% c(3, 4),
+    1,
+    disability
+  ))
+
+
+####Check final frequencies
+
+table(ind$disability)
+
+
+###Below indicators will be used to disaggregate during the analysis.
+##Country of origin : `citizenship`
+##Age categories : `HH07_cat` and `HH07_cat2`
+##Gender : `HH04`
+##Population groups: `pop_groups`
+###Disability: disability
+
+table(main$pop_groups)
+table(ind$HH04)
+
+
+
+#####MERGE DISAGGREGATION VARIABLES FROM INDIVIDUAL TO HOUSEHOLD DATASET####
+
+####RANDOMLY SELECTED ADULT  
+
+
+###Run this step if only you have extra variable for the first selected with the same name
+main$name_selectedfirst <- ifelse(is.na(main$name_selectedadult18), main$name_selectedadult18_1, main$name_selectedadult18)
+
+table(main$name_selectedfirst)
+
+
+###Create a variable called random_adult to match with the main dataset
+
+main <- main %>%
+  mutate(random_adult=case_when(
+    random_present %in% c(1,3) ~ name_selectedfirst,
+    random_present_2 %in% c(1,3) ~ name_selectedadult18_2,
+    TRUE ~ name_respondent)
+         )
+
+
+table(main$random_adult)
+
+
+
+##Create a new dataset with indicators for merge, below you can add all other indicators you want to import from individual dataset
+
+
+
+ind_m <- ind %>% ###Here below add idp_valid if only you have IDPs 
+  select("_parent_index", "HH07_cat", "HH07_cat2", "disability",
+         "citizenship","idp_valid", "HH07", "HH04", "HH03", "name_individual", "HH01" ) 
+
+
+
+main <- left_join(main, ind_m,
+                  by = c("random_adult"="name_individual", "_index" = "_parent_index"))
+
+rm(ind_m)
+
+
+##Create a new dataset with the indicators that you want to import
+
+main_m <- main %>%
+  select("_index", pop_groups, end_result) ## add variables here
+
+ind <- left_join(main_m, ind, 
+                 by = c("_index" = "_parent_index"))
+
+rm(main_m)
+
+
+
+####ind cleaning 
+
+###Before you start creating variables for further disaggregation, CLEAN your RMS data!
+###You can get inspired from below steps to help you with your primary cleaning in addition to the steps below
+
+
+
+####Step 3. ind Type Conversion 
+####Use functions like as.numeric(), as.character(), or as.Date() to convert ind types as needed
+
+####Step 4. Document your cleaning decisions
+####Document the ind cleaning steps and decisions using comments in your R script or
+##a separate documentation file.
+# Add comments in your script or R Markdown to explain what changes were made and why.
+
+
+# Step 5.  Perform Exploratory ind Analysis (EDA)
+# Conduct EDA to understand the distribution, relationships, and patterns in the cleaned ind.
+# Visualize the ind using plots or charts to identify any anomalies.
+
+####EDA Analysis
+
+
+###NOTE THAT -  You can access the respective codes for response options within your KoBo form
+
+#####Summary Statistics: Compute basic statistics like mean, median, standard deviation, 
+####and quartiles for numerical variables using the summary(), mean(), median(), sd(), quantile(), or summary() functions.
+
+
+###Histograms: Create histograms to visualize the distribution of numerical ind using the hist() function.
+
+# Example of a histogram
+
+##For instance you should check below and confirm that there are no adults below 18
+
+hist(main$HHH01_age, main = "Histogram of the age of household head")
+hist(main$HH07)
+
+
+####Bar Plots: For categorical ind, create bar plots to visualize the distribution using the barplot() 
+####or ggplot2 package.
+
+
+# Example of a bar plot
+
+barplot(table(main$pop_groups), main = "Population groups")
+
+
+###Scatter Plots: Visualize relationships between two numerical variables using scatter plots with plot() or ggplot2. 
+####This helps identify correlations and patterns.
+
+# Example of a scatter plot
+plot(ind$num_var1, ind$num_var2, main = "Scatter Plot")
+
+
+
+# After performing these primary ind quality checks, your data should be validated and ready for calculation of the variables
+
+
+# Compare Results with Expectations
+# Compare the results of your analysis with your expectations to identify discrepancies.
+
+# Document the Validation Process
+# Keep detailed records of the checks, validations, and their outcomes for future reference.
+
+# If issues or discrepancies are identified during validation, you may need to revisit the ind cleaning process and make necessary adjustments.
+
+
+
+####Remove variables that you do not need for further data manipulation
+
+
+# Create a new dataset with only required variables
+
+###For individual dataset
+
+vars_to_remove_ind <- c("hhroster_pos_aux", "ageMD", "age18above", "age_est", "month_est", "position", "position18",
+                    "Relation_R", "adult18", "women_b_count", "women_b", "father_b", "childLess2", "childLess2name",
+                    "women", "father", "adult", "adult_sum", "adult01")
+
+ind <- ind[, !(names(ind) %in% vars_to_remove_ind)]
+
+###For main dataset
+
+
+vars_to_remove_main <- c("namechild2less", "nochildless2", "women_name_b_total", "women_name_b", "father_name_b",
+                         "women_name", "father_name", "random1ap", "random1ap2", "eadult_nap", "eadult_nap2",
+                         "epositionap", "epositionap2", "random_indexap", "random_indexap2", "selected_adultap",
+                         "selected_adultap2")
+
+main <- main[, !(names(main) %in% vars_to_remove_main)]
+
+
+
+#####Export datasets for RIDL upload as cleaned versions
+
+ #### Individual dataset
+
+# Specify the file path where you want to export the dataset
+
+file_path <- "path/to/your/directory/your_data.csv"
+
+# Export the 'ind' dataset to a CSV file at the specified file path
+write.csv(ind, file = file_path, row.names = FALSE)
+
+# Check if the file was created at the specified path
+if (file.exists(file_path)) {
+  cat("Dataset exported to", file_path, "\n")
+} else {
+  cat("Export failed\n")
+}
+
+
+
+#### Main dataset
+
+# Specify the file path where you want to export the dataset
+
+file_path <- "path/to/your/directory/your_data.csv"
+
+# Export the 'ind' dataset to a CSV file at the specified file path
+write.csv(main, file = file_path, row.names = FALSE)
+
+# Check if the file was created at the specified path
+if (file.exists(file_path)) {
+  cat("Dataset exported to", file_path, "\n")
+} else {
+  cat("Export failed\n")
+}
+
