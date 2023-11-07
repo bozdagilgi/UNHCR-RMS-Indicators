@@ -2,5 +2,7 @@
 Here is the standard indicator calculations for RMS which is done based on CAPI v2 RMS.
 
 
-##For further information you can check :[https://rstudio.unhcr.org/connect/#/apps/8b3541bc-ebbd-4fa8-8df8-c09817ffeab5/access](https://rstudio.unhcr.org/data-preparation/)https://rstudio.unhcr.org/data-preparation/
+##For further information you can check : 
+Data preparation :https://rstudio.unhcr.org/data-preparation/
+Indicator calculations: https://rstudio.unhcr.org/RBM-indicators/
 
