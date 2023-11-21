@@ -368,6 +368,37 @@ table(ind$disability)
 table(main$pop_groups)
 table(ind$HH04)
 
+##Label the variables below 
+
+pop_groups_labels <- c(
+  "1" = "Asylum-seekers",
+  "2" = "Refugees",
+  "3" = "People in a refugee-like situation",
+  "4" = "Refugee returnees",
+  "5" = "IDPs",
+  "6" = "IDP returnees",
+  "7" = "Stateless people",
+  "8" = "Host communities"
+)
+
+main <- main %>%
+  mutate(pop_groups = recode_factor(pop_groups, !!!setNames(as.character(pop_groups_labels), as.character(seq_along(pop_groups_labels)))))
+
+
+##Label HH04 - sex variable
+
+
+# Define labels for HH04
+HH04_labels <- c(
+  "1" = "Female",
+  "2" = "Male",
+  "3" = "Intersex",
+  "99" = "Prefer not to respond"
+)
+
+main <- main %>%
+  mutate(HH04 = recode_factor(HH04, !!!setNames(as.character(HH04_labels), as.character(seq_along(HH04_labels)))))
+
 
 
 #####MERGE DISAGGREGATION VARIABLES FROM INDIVIDUAL TO HOUSEHOLD DATASET####
