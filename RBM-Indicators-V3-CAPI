@@ -1,0 +1,1734 @@
+###########RMS Qv3 Indicator Calculations############
+##########UNHCR
+#########Author: Ilgi Bozdag
+
+######################################################
+#####Standard Scripts for RBM Indicators##############
+######################################################
+
+##At this step, you should already have main and ind datasets 
+###structured in a way that will allow you to calculate your indicators as you will be guided in this document
+###It's not recommended to clear your work space if you have your main and ind datasets loaded
+
+#### Load packages ( if you have not already in the first step)
+
+#install
+install.packages("ggplot2")
+install.packages('visdat')
+install.packages("remotes")
+install.packages("DiagrammeR")
+install.packages('dplyr')
+remotes::install_github("dickoa/robotoolbox")
+
+
+##load
+library(haven)
+library(tidyverse)
+library(readxl)
+library(srvyr)
+library(ggplot2)
+library(robotoolbox)
+library(labelled)
+library(remotes)
+library(dm)
+library(janitor)
+library(visdat)
+library(dplyr)
+library(writexl)
+
+
+
+###Create function that turn character values into numeric if you imported from KoBO
+##This is important as it will be used frequently
+
+labelled_chr2dbl <- function(x) {
+  varlab <- var_label(x)
+  vallab <- val_labels(x)
+  vallab <- setNames(as.numeric(vallab),
+                     names(vallab))
+  x <- as.numeric(as.character(x))
+  var_label(x) <- varlab
+  val_labels(x) <- vallab
+  x
+}
+
+#Core Impact Indicators
+
+
+
+###2.2 Proportion of people residing in physically safe and secure settlements with access to basic facilities
+##Module :	LIGHT01-LIGHT03 (9.2) + HEA01-HEA03 (health) +  DWA01-DWA04 (12.1) + SHEL01-SHEL06 and RISK01-RISK02 and DWE05 (9.1)
+
+
+###All variables for this indicators are in the main dataset both for CAPI and CATI
+
+##This indicator aims to measure the proportion of forcibly displaced and stateless people that 
+##reside in safe and secure settlements with access to basic facilities such as 
+##shelter, WASH, energy and security from natural hazards
+
+
+###Step.1. Electricity
+
+
+##Here we will create a binary variable if they use anything for lighting (LIGHT01), 
+##and the light source for most of the time is electricity (LIGHT02) - 
+##exclude cases if they selected LIGHT03 - 0 ( no electricity)
+
+table(main$LIGHT01)
+table(main$LIGHT02)
+
+
+
+main <- main %>%
+  mutate(electricity = ifelse(LIGHT01 == "1" & LIGHT02 == "1" & LIGHT03 != "0", 1, 0)
+  ) %>%
+  mutate( electricity = labelled(electricity,
+                                 labels = c(
+                                   "Yes" = 1,
+                                   "No" = 0
+                                 ),
+                                 label = "Access to electricity"))
+
+table(main$electricity)
+
+###Step2. Healthcare
+
+###Access to healthcare if household has any facility available excluding 'don't know' and 'other' 
+#within one hour distance (cannot be > 60) (walking or any other type of transport)
+ 
+
+main <- main %>%
+  mutate(healthcare = ifelse(HEA01 != "96" & HEA01 != "98" & HEA03 <= 60, 1, 0)
+         ) %>%
+  mutate( healthcare = labelled(healthcare,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "Access to healthcare facility"))
+
+table(main$healthcare)
+
+###Step3. Drinking water
+
+###Access to drinking water is calculated as below
+##use improved sources of drinking water in their housing or within 30 minutes round trip collection time
+
+
+###Convert time variable to minutes only
+
+main <- main %>%
+  mutate(time_DWA=case_when(
+    DWA03a=="1"~ "1", DWA03a=="2"~"60") #convert hour into minutes
+  )
+
+main$time_DWA <- as.numeric(main$time_DWA)
+
+table(main$time_DWA)
+
+###Compute variable with above conditions
+
+main <- main %>%
+  mutate(time_tot=time_DWA*DWA03b
+  ) %>% 
+  mutate(dwa_cond1=case_when( time_tot > 30 ~ 0, 
+                              TRUE ~ 1) # reachable under 30 minutes or NA
+  ) %>% 
+  mutate(dwa_cond2=case_when(DWA01!="7" |DWA01 !="9" |DWA01 != "13" | DWA01 != "96" |DWA01 !="98" ~ 1,
+                             TRUE ~ 0) # improved source only
+  ) %>%
+  mutate(dwa_cond3=case_when(DWA02 == "3" ~ 0, 
+                             TRUE ~ 1) # in the dwelling/yard/plot
+  ) %>% 
+  mutate(drinkingwater=case_when(
+    (dwa_cond1=="1" & dwa_cond2=="1" & dwa_cond3=="1") ~ 1, TRUE ~ 0)
+  ) %>%
+  mutate(drinkingwater = labelled(drinkingwater,
+                                  labels = c(
+                                    "Yes" = 1,
+                                    "No" = 0
+                                  ),
+                                  label = "Access to drinking water"))
+
+table(main$drinkingwater)
+
+
+###Step 4. Habitable housing
+
+##Condition 1
+
+##Classify as habitable for below conditions - if 98 selected, put into missing
+
+##First check the variables
+
+table(main$SHEL01)
+table(main$SHEL02)
+table(main$SHEL03)
+table(main$SHEL04)
+table(main$SHEL05)
+table(main$SHEL06)
+
+main$SHEL01 <- labelled_chr2dbl(main$SHEL01)
+main$SHEL02 <- labelled_chr2dbl(main$SHEL02)
+main$SHEL03 <- labelled_chr2dbl(main$SHEL03)
+main$SHEL04 <- labelled_chr2dbl(main$SHEL04)
+main$SHEL05 <- labelled_chr2dbl(main$SHEL05)
+main$SHEL06 <- labelled_chr2dbl(main$SHEL06)
+
+
+
+
+  main <- main %>%
+  mutate(across(starts_with("SHEL"), ~ifelse(. == 98, NA, .))) %>%
+  mutate(housing = case_when(
+    (SHEL01 == "1") & (SHEL02 == "1") & (SHEL05 == "1") & 
+      (SHEL03 == "0" ) & (SHEL04 == "0" ) & (SHEL06 == "0" ) ~ 1,
+    (SHEL01 == "0") | (SHEL02 == "0" ) | (SHEL05 == "0") |
+      (SHEL03 == "1") | (SHEL04 == "1") | (SHEL06 == "1" ) ~ 0,
+    TRUE ~ NA_integer_
+  ))
+
+table(main$housing)
+
+
+##Condition 2
+####Calculate crowding index - overcrowded when more than 3 persons share one room to sleep
+###Overcrowding may cause health issues, thus not considered as physically safe
+
+
+table(main$hh_size_001)
+table(main$DWE05)
+
+
+main <- main %>%
+  mutate(crowding=hh_size_001/DWE05
+  ) %>%
+  mutate(dwe05_cat=case_when( ##if crowding <= 3, not overcrowded 
+    crowding <= 3 ~ 1, TRUE ~ 0)
+  )
+
+ 
+table(main$crowding)
+table(main$dwe05_cat)
+
+###Combine both conditions for habitable housing
+
+main <- main %>%
+  mutate(shelter=case_when(
+    dwe05_cat==1 & housing==1 & !(DWE01 %in% c("3", "4", "5", "6", "7", "8", "9", "96")) ~ 1,
+    TRUE ~ 0
+  ))
+
+table(main$shelter)
+
+
+##Step 5. Safe and secure settlements are those with no risks and hazards like flooding, landslides, 
+###landmines, and close proximity to military installations and hazardous zones
+
+table(main$RISK01)
+table(main$RISK02)
+
+
+main <- main %>%
+  mutate(secure=case_when(
+    RISK01=="1" |  RISK02=="1" ~ 0,
+    TRUE ~ 1
+  ))
+
+table(main$secure)
+
+
+##Step 6. Combine all services
+
+###Calculate impact indicator based on electricity, healthcare, drinkingwater, shelter and secure
+
+##Impact 2.2 is "1" if all services above are accessible
+
+main <-main %>%
+  mutate(impact2_2=case_when(
+    shelter==0 | electricity==0 | drinkingwater==0 | healthcare==0 | secure==0 ~ 0,
+    shelter==1 & electricity==1 & drinkingwater==1 & healthcare==1 & secure==1 ~ 1)
+  ) %>% 
+  mutate(impact2_2=labelled(impact2_2,
+                            labels =c(
+                              "Yes"=1,
+                              "No"=0
+                            ),
+                            label="Proportion of people residing in physically safe and secure settlements with access to basic facilities"))
+
+
+table(main$impact2_2)
+
+table_impact2_2 <- table(main$impact2_2, main$pop_groups)
+percentage_impact2_2 <- prop.table(table_impact2_2, margin = 2) * 100
+
+percentage_impact2_2
+
+
+###Check distribution
+
+ggplot(main, aes(x = factor(impact2_2))) +
+  geom_bar(stat = "count", fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Impact Indicator 2.2",
+       x = "Impact Indicator 2.2",
+       y = "Count") +
+  theme_minimal()
+
+
+
+
+# Check by population groups
+ggplot(main, aes(x = factor(impact2_2), fill = pop_groups)) +
+  geom_bar(position = "dodge", color = "black") +
+  labs(title = "Distribution of Impact Indicator 2.2 by Population Groups",
+       x = "Impact Indicator 2.2",
+       y = "Count",
+       fill = "Population Group") +
+  theme_minimal()
+
+###2.3 Proportion of people with access to health services
+##Module :HACC01 - HACC04
+
+table(ind$HACC01) ## Needed to see a health professional for any reason
+table(ind$HACC02) ## the reason for seeking care
+table(ind$HACC03) ## did receive the needed health care
+table(ind$HACC04) ## if not, what are the reasons for not receiving the health care
+
+
+##Calculate those who needed and accessed health services
+
+ind <- ind %>%
+  mutate(impact2_3=case_when(
+    HACC01=="1" & HACC03=="1" ~ 1,
+    HACC01=="0" ~ NA,
+    HACC01=="1" & HACC03=="0" & (HACC04_1 == "1" | HACC04_2 == "1" | HACC04_4 == "1" | HACC04_7 == "1" | HACC04_10 == "1" | HACC04_11 == "1" | 
+                                   HACC04_12 == "1" | HACC04_13 == "1") ~ 0 ,
+    HACC01=="1" & HACC03=="0" & (HACC04_3 == "1" | HACC04_5 == "1" | HACC04_6 == "1" | HACC04_8 == "1" | 
+                                   HACC04_9 == "1" | HACC04_96 == "1") ~ 1)
+  ) %>%
+  mutate(impact2_3=labelled(impact2_3,
+                            labels =c(
+                              "Yes"=1,
+                              "No"=0
+                            ),
+                            label="Proportion of people with access to health"))
+
+###Descriptives
+
+table(ind$impact2_3)
+
+
+ggplot(ind, aes(x = factor(impact2_3), fill = factor(impact2_3))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of People with Access to Health Services",
+       x = "Access to Health Services",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+table_impact2_3 <- table(ind$impact2_3, ind$pop_groups)
+percentage_impact2_3 <- prop.table(table_impact2_3, margin = 2) * 100
+
+percentage_impact2_3
+
+
+###3.2a: Proportion of children and young people enrolled in primary education
+##Module :EDU01-EDU04
+
+
+###This indicator comes from the individual dataset
+
+ind$EDU01 <- labelled_chr2dbl(ind$EDU01)
+ind$EDU02 <- labelled_chr2dbl(ind$EDU02)
+ind$EDU03 <- labelled_chr2dbl(ind$EDU03)
+
+
+ind<- ind %>%
+  mutate(edu_primary=case_when(
+    EDU01==1 & EDU02==1 & EDU03==2 ~ 1, EDU01==0 | EDU02==0 ~ 0, TRUE ~ 0)
+  ) %>%
+  mutate(age_primary=case_when(
+    HH07 >= 6 & HH07 <=10 ~ 1, TRUE ~ NA_real_) #Adjust age group for primary school  enrollment 
+  ) %>%
+  mutate(impact3_2a=sum(edu_primary)/sum(age_primary)
+  ) %>%
+  mutate(impact3_2a=labelled(impact3_2a,
+                             labels =c(
+                               "Yes"=1,
+                               "No"=0
+                             ),
+                             label="Proportion of children and young people enrolled in primary education"))
+
+
+##Count and chart
+
+mean(ind$impact3_2a)
+table(ind$impact3_2a)
+
+ggplot(ind, aes(x = factor(impact3_2a), fill = factor(impact3_2a))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of children and young people enrolled in primary education",
+       x = "Enrollment in Primary Education",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+###3.2b: Proportion of children and young people enrolled in secondary education
+##Module :EDU01-EDU04
+
+#Turn character variables into vector
+
+ind$EDU01 <- labelled_chr2dbl(ind$EDU01)
+ind$EDU02 <- labelled_chr2dbl(ind$EDU02)
+ind$EDU03 <- labelled_chr2dbl(ind$EDU03)
+
+ind <- ind %>%
+  mutate(edu_secondary=case_when(
+    EDU01==1 & EDU02==1 & (EDU03==3 | EDU03==4) ~ 1, EDU01==0 | EDU02==0 ~ 0, 
+    TRUE ~ 0)
+  ) %>%
+  mutate(age_secondary=case_when(
+    HH07 >= 11 & HH07 <=18 ~ 1, TRUE ~ NA_real_)
+    
+    #Adjust age group for secondary school enrollment 
+    ##calculated as 11 to 18 above 
+  ) %>%
+  mutate(impact3_2b=sum(edu_secondary)/sum(age_secondary)
+  ) %>%
+  mutate(impact3_2b=labelled(impact3_2b,
+                             labels =c(
+                               "Yes"=1,
+                               "No"=0
+                             ),
+                             label="Proportion of children and young people enrolled in secondary education"))
+
+
+##Count and mean
+
+mean(ind$impact3_2a)
+table(ind$impact3_2a)
+
+##Chart
+
+ggplot(ind, aes(x = factor(impact3_2b), fill = factor(impact3_2a))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of Persons Enrolled in Secondary Education",
+       x = "Enrollment in Primary Education",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+###3.3 Proportion of people that feel safe walking alone in their neighbourhood after dark
+##Module :SAF01
+
+
+##This indicator comes from main dataset based on the respondent randomly selected for individual level
+
+
+#if unsafe or very unsafe 0, 98 and 99 go into blank
+##I never walk alone will also go into blank if any
+
+main$SAF01 <- labelled_chr2dbl(main$SAF01)
+
+main <- main %>%
+  mutate(impact3_3=case_when(
+    SAF01==1 | SAF01==2 ~ 1,
+    SAF01==3 | SAF01==4 ~ 0 , 
+    SAF01==98 | SAF01==99 ~ NA_real_)
+  ) %>% 
+  mutate(impact3_3=labelled(impact3_3,
+                            labels =c(
+                              "Yes"=1,
+                              "No"=0
+                            ),
+                            label="Proportion of people that feel safe walking alone in their neighbourhood after dark"))
+
+#count
+table(main$impact3_3)
+
+##Percentages
+
+table_impact3_3 <- table(main$impact3_3, main$HH03)
+percentage_impact3_3 <- prop.table(table_impact3_3, margin = 2) * 100
+
+percentage_impact3_3
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(impact3_3), fill = factor(impact3_3))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of People Feeling Safe Walking Alone After Dark",
+       x = "Feeling Safe",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+###Outcome Indicators
+
+###1.2 Proportion of children under 5 years of age whose births have been registered with a civil authority
+##Module :REG03 - REG04
+
+ind$REG03 <- labelled_chr2dbl(ind$REG03) # birth certificate
+ind$REG04 <- labelled_chr2dbl(ind$REG04) # birth has been registered
+
+
+##This indicator comes from the individual dataset
+
+# ind$REG03 - birth certificate
+# ind$REG04 - birth has been registered
+
+##Calculate children who has a birth certificate
+
+ind <- ind %>%
+  mutate(birthCertificate=case_when(
+    REG03==0 | REG03==98 ~ 0, REG03==1 ~ 1)
+  ) %>%
+  mutate(birthCertificate=labelled(birthCertificate,
+                                   labels=c(
+                                     'Yes'=1,
+                                     'No'=0
+                                   ),
+                                   label="Children under 5 with a birth certificate"))
+
+##Calculate children who has been registered with civil authorities
+
+ind <- ind %>%
+  mutate(birthRegistered=case_when(
+    REG04==0 | REG04==98 ~ 0, REG04==1 ~ 1, REG04==99 ~NA_real_)
+  ) %>%
+  mutate(birthRegistered=labelled(birthRegistered,
+                                  labels=c(
+                                    'Yes'=1,
+                                    'No'=0
+                                  ),
+                                  label="Children under 5 birth registered with civil authorities"))
+
+
+##if the birth is registered or child has a birth certificate
+
+
+ind <- ind %>%
+  mutate(outcome1_2=case_when(
+    (birthRegistered==1 | birthCertificate==1) 
+    & HH07 <5 ~ 1, 
+    (birthRegistered==0 & birthCertificate==0) 
+    & HH07 <5 ~ 0)
+  ) %>%
+  mutate(outcome1_2=labelled(outcome1_2,
+                             labels=c(
+                               'Yes'=1,
+                               'No'=0
+                             ),
+                             label="Proportion of children under 5 years of age whose births have been registered with a civil authority"))
+
+
+
+
+###Descriptives
+
+#count
+table(ind$outcome1_2)
+
+##Percentages
+
+table_outcome1_2 <- table(ind$outcome1_2, ind$HH04)
+percentage_outcome1_2 <- prop.table(table_outcome1_2, margin = 2) * 100
+
+percentage_outcome1_2
+
+
+
+##Chart
+
+ggplot(ind, aes(x = factor(outcome1_2), fill = factor(outcome1_2))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of children under 5 years of age whose births have been registered with a civil authority",
+       x = "Registered with authorities",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+table(ind$outcome1_2)
+
+
+
+
+###1.3 Proportion of people with legally recognized identity documents or credentials
+##Module :REG01 - REG02 - REG05 - REG06
+
+##This indicator comes from the individual dataset
+
+
+###Calculate valid identity documents for under 5 with REG05 and REG06 variables
+
+ind$REG05a <- labelled_chr2dbl(ind$REG05a) # passport
+ind$REG05b <- labelled_chr2dbl(ind$REG05b) # civil/government issued ID
+ind$REG05c <- labelled_chr2dbl(ind$REG05c) # residency permit
+ind$REG05d <- labelled_chr2dbl(ind$REG05d) # statelessness documentation
+ind$REG05e <- labelled_chr2dbl(ind$REG05e) # household card of address/family book
+ind$REG05f <- labelled_chr2dbl(ind$REG05f) # social security card
+ind$REG06 <- labelled_chr2dbl(ind$REG06) # any other document establishes identity
+
+#ind$REG05a - passport
+#ind$REG05b - civil/government issued ID
+#ind$REG05c - residency permit
+#ind$REG05d - statelessness documentation
+#ind$REG05e - household card of address/family book
+#ind$REG05f - social security card
+#ind$REG06 - any other document establishes identity
+#add birth certificate as additional document from REG03
+
+#Make sure to delete REG05e below from the script if you don't have any stateless 
+
+ind <- ind %>%
+  mutate(document_under5=case_when(
+    REG05a==1 | REG05b==1 | REG05c==1 | REG05d==1 | REG05e==1 | REG05f==1 |REG06==1 | REG03==1 ~ 1, 
+    REG05a!=1 & REG05b!=1 & REG05c!=1 & REG05d!=1 & REG05e!=1 & REG05f!=1 & REG06!=1 & REG03!=1 ~ 0, TRUE ~ NA_real_
+  ))
+
+###Calculate  valid identity documents for above 5 with REG01 and REG02 variables
+
+ind$REG01a <- labelled_chr2dbl(ind$REG01a) # passport
+ind$REG01b <- labelled_chr2dbl(ind$REG01b) # birth certificate
+ind$REG01c <- labelled_chr2dbl(ind$REG01c) # civil/ government issued ID
+ind$REG01d <- labelled_chr2dbl(ind$REG01d) # residency permit
+ind$REG01e <- labelled_chr2dbl(ind$REG01e) # statelessness documentation
+ind$REG01f <- labelled_chr2dbl(ind$REG01f) # household card of address/family book
+ind$REG01g <- labelled_chr2dbl(ind$REG01g) # social security card
+ind$REG02 <- labelled_chr2dbl(ind$REG02) # any other document establishes identity
+
+#ind$REG01a # passport
+#ind$REG01b # birth certificate
+#ind$REG01c # civil/ government issued ID
+#ind$REG01d # residency permit
+#ind$REG01e # statelessness documentation
+#ind$REG01f # household card of address/family book
+#ind$REG01g # social security card
+#ind$REG02 # any other document establishes identity
+
+#Make sure to delete REG01e below from the script if you don't have any stateless   
+
+ind <- ind %>%
+  mutate(document_above5=case_when(
+    REG01a==1 | REG01b==1 | REG01c==1 | REG01d==1 | REG01e==1 | REG01f==1 | REG01g==1 |REG02==1 ~ 1,
+    REG01a!=1 & REG01b!=1 & REG01c!=1 & REG01d!=1 & REG01e!=1 & REG01f!=1 & REG01g!=1 & REG02!=1 ~ 0, TRUE ~ NA_real_)
+    
+    ##Combine both age groups
+  ) %>%
+  mutate(outcome1_3=case_when(
+    (document_above5==1 | document_under5==1) ~ 1,  
+    (document_above5==0 | document_under5==0) ~ 0)
+  ) %>%
+  mutate(outcome1_3=labelled(outcome1_3,
+                             labels=c(
+                               'Yes'=1,
+                               'No'=0
+                             ),
+                             label="Proportion of people with legally recognized identity documents or credentials"))
+
+###Descriptives
+
+#count
+table(ind$outcome1_3)
+
+##Percentages
+
+table_outcome1_3 <- table(ind$outcome1_3, ind$HH04)
+percentage_outcome1_3 <- prop.table(table_outcome1_3, margin = 2) * 100
+
+percentage_outcome1_3
+
+
+
+##Chart
+
+ggplot(ind, aes(x = factor(outcome1_3), fill = factor(outcome1_3))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people with legally recognized identity documents or credentials",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+
+
+###4.1 Proportion of people who know where to access available GBV service
+##Module :GBV01
+
+##Turn into numeric variables for services
+
+main$GBV01a <- labelled_chr2dbl(main$GBV01a) # health services
+main$GBV01b <- labelled_chr2dbl(main$GBV01b) # psycho-social services
+main$GBV01c <- labelled_chr2dbl(main$GBV01c) # safety and security services
+main$GBV01d <- labelled_chr2dbl(main$GBV01d) # legal assistance
+
+
+
+main <- main %>%
+  mutate(outcome4_1 = case_when(
+    as.character(GBV01a) == "1" | as.character(GBV01b) == "1" ~ "1",  # If GBV01a or GBV01b is "1", then set to "1"
+    all(c(GBV01a, GBV01b, GBV01c, GBV01d) == 98) ~ NA_character_,  # If all are 98, then set to NA
+    TRUE ~ "0"  # For the rest, set to "0"
+  )) %>%
+  mutate(outcome4_1=labelled(outcome4_1,
+                             labels=c(
+                               'Yes'="1",
+                               "No"="0"
+                             ),
+                             label="Proportion of people who know where to access available GBV service"
+  ))
+
+class(main$outcome4_1)
+
+
+
+
+
+
+##Descriptives 
+
+
+#count
+table(main$outcome4_1)
+
+##Percentages
+
+table_outcome4_1 <- table(main$outcome4_1, main$HH04)
+percentage_outcome4_1 <- prop.table(table_outcome4_1, margin = 2) * 100
+
+percentage_outcome4_1
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome4_1), fill = factor(outcome4_1))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people who know where to access available GBV services",
+       x = "Knows where to access available GBV services",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+
+
+###4.2 Proportion of people who do not accept violence against women
+##Module :VAW01
+
+#Turn into numeric variables
+main$VAW01a <- labelled_chr2dbl(main$VAW01a)
+main$VAW01b <- labelled_chr2dbl(main$VAW01b)
+main$VAW01c <- labelled_chr2dbl(main$VAW01c)
+main$VAW01d <- labelled_chr2dbl(main$VAW01d)
+main$VAW01e <- labelled_chr2dbl(main$VAW01e)
+
+##This indicator comes from main dataset based on the respondent randomly selected for individual level
+
+#If randomly selected adult who believes that a  husband is justified in beating his wife in various circumstances
+
+##If yes selected for any of the circumstances
+###Prefer not to respond will be put into missing
+main <- main %>%
+  mutate(outcome4_2=case_when(
+    VAW01a==1 | VAW01b==1 |  VAW01c==1 |  VAW01d==1 | VAW01e==1 ~ 0,
+    VAW01a==0 & VAW01b==0 &  VAW01c==0 &  VAW01d==0 & VAW01e==0 ~ 1,
+    TRUE ~ NA_real_)
+  ) %>%
+  mutate(outcome4_2=labelled(outcome4_2,
+                             labels=c(
+                               'Yes'=1,
+                               "No"=0
+                             ),
+                             label="Proportion of people who do not accept violence against women"
+  ))
+
+##Descriptives
+
+#count
+table(main$outcome4_2)
+
+##Percentages
+
+table_outcome4_2 <- table(main$outcome4_2, main$HH04)
+percentage_outcome4_2 <- prop.table(table_outcome4_2, margin = 2) * 100
+
+percentage_outcome4_2
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome4_2), fill = factor(outcome4_2))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people who do not accept violence against women",
+       x = "Does not accept violence against women",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+
+###5.2 Proportion of children who participate in community-based child protection programmes
+##Module :COMM01-COMM04
+
+#Turn into numeric variables
+ind$COMM01 <- labelled_chr2dbl(ind$COMM01)
+ind$COMM02 <- labelled_chr2dbl(ind$COMM02)
+ind$COMM03 <- labelled_chr2dbl(ind$COMM03)
+ind$COMM04 <- labelled_chr2dbl(ind$COMM04)
+
+
+###This indicator comes from the individual level dataset
+
+
+#Children who participate in community-based programmes at least once 
+##under adult supervision in a physically safe area
+
+ind <- ind %>%
+  mutate(outcome5_2=case_when(
+    (COMM01==1 & ( COMM02 >=1 & COMM02!=98) & COMM03==1 & COMM04==1) ~ 1,
+    (COMM01==0 | 
+       (COMM02==0 | COMM02==98) | 
+       (COMM03==0 | COMM03==98) |
+       (COMM04==0 | COMM04==98)) ~ 0, TRUE ~ NA_real_)
+  ) %>%
+  mutate(outcome5_2=labelled(outcome5_2,
+                             labels=c(
+                               'Yes'=1,
+                               "No"=0
+                             ),
+                             label="Proportion of children who participate in community-based child protection programmes"
+  ))
+
+
+##descriptives
+#count
+table(ind$outcome5_2)
+
+##Percentages
+
+table_outcome5_2 <- table(ind$outcome5_2, ind$HH04)
+percentage_outcome5_2 <- prop.table(table_outcome5_2, margin = 2) * 100
+
+percentage_outcome5_2
+
+
+
+##Chart
+
+ggplot(ind, aes(x = factor(outcome5_2), fill = factor(outcome5_2))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of children who participate in community-based child protection programmes",
+       x = "Participates in community-based child protection programmes",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+###8.2 Proportion of people with primary reliance on clean (cooking) fuels and technology
+##Module :COOK01-COOK03
+
+main$COOK01 <- labelled_chr2dbl(main$COOK01)
+main$COOK02 <- labelled_chr2dbl(main$COOK02)
+main$COOK03 <- labelled_chr2dbl(main$COOK03)
+
+
+###Based on MICS calculation : TC4.1
+
+main <- main %>%
+  mutate(
+    outcome8_2 = case_when(
+      (COOK01 == 1 & (COOK02 %in% c("1", "2", "3", "4", "5")) | (COOK02 %in% c("10") & COOK03 %in% c("1"))
+      ) ~ 1, 
+      (COOK01 == 1 & (COOK02 %in% c("7", "8", "9", "10", "96")) | ((COOK02 %in% c("10") & !(COOK03 %in% c("1")
+      )))) ~ 0 ,
+      COOK01==0 ~ 0,
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  mutate(
+    outcome8_2 = labelled(outcome8_2,
+                          labels = c(
+                            "No" = 0,
+                            "Yes" = 1
+                          ),
+                          label = "Proportion of people with primary reliance on clean (cooking) fuels and technology"
+    )
+  )
+
+##Descriptives
+
+#count
+table(main$outcome8_2)
+
+
+##Percentages
+
+table_outcome8_2 <- table(main$outcome8_2, main$pop_groups)
+percentage_outcome8_2 <- prop.table(table_outcome8_2, margin = 2) * 100
+
+percentage_outcome8_2
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome8_2), fill = factor(outcome8_2))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people with primary reliance on clean (cooking) fuels and technology",
+       x = "Primary reliance on clean (cooking) fuels and technology",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+###9.1 Proportion of people living in habitable and affordable housing
+##Module :DWE01 – SHEL01-SHEL06 – DWE05 – DWE08-DWE09
+
+
+##This indicator is calculated from the main dataset
+
+##Condition 1
+
+##Classify as habitable for below conditions - if 98 selected, put into missing
+
+##First check the variables
+
+table(main$SHEL01)
+table(main$SHEL02)
+table(main$SHEL03)
+table(main$SHEL04)
+table(main$SHEL05)
+table(main$SHEL06)
+
+main$SHEL01 <- labelled_chr2dbl(main$SHEL01)
+main$SHEL02 <- labelled_chr2dbl(main$SHEL02)
+main$SHEL03 <- labelled_chr2dbl(main$SHEL03)
+main$SHEL04 <- labelled_chr2dbl(main$SHEL04)
+main$SHEL05 <- labelled_chr2dbl(main$SHEL05)
+main$SHEL06 <- labelled_chr2dbl(main$SHEL06)
+
+
+
+
+main <- main %>%
+  mutate(across(starts_with("SHEL"), ~ifelse(. == 98, NA, .))) %>%
+  mutate(habitablehousing = case_when(
+    (SHEL01 == "1") & (SHEL02 == "1") & (SHEL05 == "1") & 
+      (SHEL03 == "0" ) & (SHEL04 == "0" ) & (SHEL06 == "0" ) ~ 1,
+    (SHEL01 == "0") | (SHEL02 == "0" ) | (SHEL05 == "0") |
+      (SHEL03 == "1") | (SHEL04 == "1") | (SHEL06 == "1" ) ~ 0,
+    TRUE ~ NA_integer_
+  ))
+
+table(main$habitablehousing)
+
+
+##Condition 2
+####Calculate crowding index - overcrowded when more than 3 persons share one room to sleep
+###Overcrowding may cause health issues, thus not considered as physically safe
+
+
+table(main$hh_size_001)
+table(main$DWE05)
+
+
+main <- main %>%
+  mutate(crowding=hh_size_001/DWE05
+  ) %>%
+  mutate(dwe05_cat=case_when( ##if crowding <= 3, not overcrowded 
+    crowding <= 3 ~ 1, TRUE ~ 0)
+  )
+
+
+table(main$crowding)
+table(main$dwe05_cat)
+
+##Condition 3
+
+
+## Add DWE08 and DWE09 to calculations - if household is paying rent, they should be able to afford to pay rent without any financial distress
+
+table(main$DWE08)
+table(main$DWE09)
+
+main$DWE08 <- labelled_chr2dbl(main$DWE08)
+main$DWE09 <- labelled_chr2dbl(main$DWE09)
+
+main <- main %>%
+  mutate(dwe09_cat=case_when( #affordable if HH pays rent and often and always without financial distress
+    (DWE08==1 & (DWE09==1 | DWE09==2)) ~ 1, 
+    (DWE08==1 & (DWE09==3 | DWE09==4)) ~ 0,  
+    DWE08==0 ~ 1) ## if not 0, then not into missing but 1 to be able to calculate the composite indicator
+  )
+
+table(main$dwe09_cat)
+
+###Combine all three conditions for habitable housing
+
+
+main <- main %>%
+  mutate(
+    outcome9_1 = case_when(
+      dwe05_cat == 1 & habitablehousing == 1 & dwe09_cat == 1 & !(DWE01 %in% c("3", "4", "5", "6", "7", "8", "9", "96")) ~ 1,
+      TRUE ~ 0
+    ),
+    outcome9_1 = labelled(outcome9_1,
+                          labels = c("Yes" = 1, "No" = 0),
+                          label = "Proportion of people living in habitable and affordable housing")
+  )
+
+
+##Descriptives
+ 
+
+#count
+table(main$outcome9_1)
+
+
+##Percentages
+
+table_outcome9_1 <- table(main$outcome9_1, main$pop_groups)
+percentage_outcome9_1 <- prop.table(table_outcome9_1, margin = 2) * 100
+
+percentage_outcome9_1
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome9_1), fill = factor(outcome9_1))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people living in habitable and affordable housing",
+       x = "Living in habitable and affordable housing",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+
+
+
+###9.2 Proportion of people that have energy to ensure lighting
+##Module :LIGHT01-LIGHT03
+
+main$LIGHT01 <- labelled_chr2dbl(main$LIGHT01)
+main$LIGHT02 <- labelled_chr2dbl(main$LIGHT02)
+main$LIGHT03 <- labelled_chr2dbl(main$LIGHT03)
+
+
+###This basic service is calculated from the main dataset
+
+### The below Calculates percentage of PoC having access to clean fuel for lighting and / or basic connectivity (9.1 Outcome Indicator)
+
+main <- main %>% 
+  mutate(outcome9_2=
+           case_when(LIGHT01==1 & (LIGHT02==1 |LIGHT02==2 | LIGHT02==3 | LIGHT02==4 | LIGHT02==5 | 
+                                     LIGHT02==6 |LIGHT02==7) ~ 1, TRUE ~ 0)
+  ) %>%
+  mutate( outcome9_2 = labelled(outcome9_2,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "Proportion of people that have energy to ensure lighting"))
+
+##Descriptives
+
+
+#count
+table(main$outcome9_2)
+
+
+##Percentages
+
+table_outcome9_2 <- table(main$outcome9_2, main$pop_groups)
+percentage_outcome9_2 <- prop.table(table_outcome9_2, margin = 2) * 100
+
+percentage_outcome9_2
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome9_2), fill = factor(outcome9_2))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people that have energy to ensure lighting",
+       x = "Have energy to ensure lighting",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+###10.1 Proportion of children aged 9 months to five years who have received measles vaccination*
+##Module :MMR01-MMR04 ##  MICS TC.1.1 UNICEF calculates on the first dose received##
+
+#Turn into numeric
+ind$MMR03 <- labelled_chr2dbl(ind$MMR03)
+
+
+ind <- ind %>%
+  mutate(outcome10_1=case_when(
+    MMR03==1 ~ 1, MMR03==0  | MMR03==98 ~ 0)
+  ) %>%
+  mutate( outcome10_1 = labelled(outcome10_1,
+                                 labels = c(
+                                   "Yes" = 1,
+                                   "No" = 0
+                                 ),
+                                 label = "Proportion of children aged 9 months to five years who have received measles vaccination*"))
+
+##Descriptives
+
+
+#count
+table(ind$outcome10_1)
+
+
+##Percentages
+
+table_outcome10_1 <- table(ind$outcome10_1, ind$HH04)
+percentage_outcome10_1 <- prop.table(table_outcome10_1, margin = 2) * 100
+
+percentage_outcome10_1
+
+
+
+##Chart
+
+ggplot(ind, aes(x = factor(outcome10_1), fill = factor(outcome10_1))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of children aged 9 months to five years who have received measles vaccination",
+       x = "Received measles vaccination",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+
+###10.2 Proportion of births attended by skilled health personnel
+##Module :BIR01-BIR04
+
+##If there are live births in the last 2 years
+
+main$BIR03 <- labelled_chr2dbl(main$BIR03)
+main$BIR01 <- labelled_chr2dbl(main$BIR01)
+main$BIR02 <- labelled_chr2dbl(main$BIR02)
+
+##  MICS TM.5.a UNICEF MICS calculation if there was a trained health personnel ##
+
+##If there are live births in the last 2 years 
+
+
+
+
+main <- main %>%
+  mutate(outcome10_2=case_when( 
+    (BIR01==1 | BIR02==1) & (BIR03==1 |BIR03==2 | BIR03==3 ) ~ 1,
+    (BIR01==1 | BIR02==1) & (BIR03==4 |BIR03==5 | BIR03==6) ~ 0, 
+    BIR03==96| BIR03==98 ~ NA_real_,
+    TRUE ~ NA_real_)
+  ) %>%
+  mutate( outcome10_2 = labelled(outcome10_2,
+                                 labels = c(
+                                   "Yes" = 1,
+                                   "No" = 0
+                                 ),
+                                 label = "Proportion of births attended by skilled health personnel"))
+
+##Descriptives
+
+
+#count
+table(main$outcome10_2)
+
+
+##Percentages
+
+table_outcome10_2 <- table(main$outcome10_2, main$pop_groups)
+percentage_outcome10_2 <- prop.table(table_outcome10_2, margin = 2) * 100
+
+percentage_outcome10_2
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome10_2), fill = factor(outcome10_2))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of births attended by skilled health personnel",
+       x = "Births attended by skilled health personnel",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+
+
+
+###12.1 Proportion of people using at least basic drinking water services
+##Module :DWA01-DWA03
+
+##Turn into numeric
+
+
+main$DWA01 <- labelled_chr2dbl(main$DWA01)
+main$DWA02 <- labelled_chr2dbl(main$DWA02)
+main$DWA03a <-labelled_chr2dbl(main$DWA03a)
+main$DWA03b <-labelled_chr2dbl(main$DWA03b)
+
+###There are three conditions as below 
+##improved source, in dwelling/yard/plot and reachable under 30 minutes 
+
+main <- main %>%
+  mutate(time_DWA=case_when(
+    DWA03a==1~1, DWA03a==2~60) #convert hour into minutes
+  ) %>%
+  mutate(time_tot=time_DWA*DWA03b
+  ) %>% 
+  mutate(dwa_cond1=case_when( time_tot > 30 ~ 0, 
+                              TRUE ~ 1) # reachable under 30 minutes
+  ) %>% 
+  mutate(dwa_cond2=case_when(DWA01!=7 |DWA01 !=9 |DWA01 != 13 | DWA01 != 96 |DWA01 !=98 ~ 1,
+                             TRUE ~ 0) # improved source
+  ) %>%
+  mutate(dwa_cond3=case_when(DWA02 == 3 ~ 0, 
+                             TRUE ~ 1) # in the dwelling/yard/plot
+  ) %>% 
+  mutate(outcome12_1=case_when(
+    (dwa_cond1==1 & dwa_cond2==1 & dwa_cond3==1) ~ 1, TRUE ~ 0)
+  ) %>%
+  mutate(outcome12_1 = labelled(drinkingwater,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "Proportion of people using at least basic drinking water services"))
+
+##Descriptives
+
+
+#count
+table(main$outcome12_1)
+
+
+##Percentages
+
+table_outcome12_1 <- table(main$outcome12_1, main$pop_groups)
+percentage_outcome12_1 <- prop.table(table_outcome12_1, margin = 2) * 100
+
+percentage_outcome12_1
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome12_1), fill = factor(outcome12_1))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people using at least basic drinking water services",
+       x = "People using at least basic drinking water services",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+
+
+
+# Create a bar chart with percentages and disaggregated by 'pop_groups'
+
+ggplot(main, aes(x = factor(outcome12_1), fill = factor(outcome12_1))) +
+  geom_bar(position = "fill", show.legend = FALSE) +
+  facet_wrap(~pop_groups, scales = "free_y") +
+  labs(title = "Proportion of people using at least basic drinking water services",
+       x = "People using at least basic drinking water services",
+       y = "Percentage") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +  # Format y-axis as percentages
+  theme_minimal()
+
+
+
+
+
+
+###12.2 Proportion of people with access to a safe household toilet
+##Module :TOI01-TOI05 ##MICS calculation WS3.1/WS3.4
+
+##This indicator measures the proportion of people with access to at 
+##least basic sanitation services.
+
+##MICS calculation WS3.1/WS3.4
+
+main$TOI01 <- labelled_chr2dbl(main$TOI01)
+main$TOI02 <- labelled_chr2dbl(main$TOI02)
+main$TOI03 <- labelled_chr2dbl(main$TOI03)
+main$TOI04 <- labelled_chr2dbl(main$TOI04)
+main$TOI05 <- labelled_chr2dbl(main$TOI05)
+
+
+
+main <- main %>%
+  mutate(toi_cond1=case_when(TOI01==1 |TOI01==2 | TOI01==3 | TOI01==4 |TOI01==5 |TOI01==6 | TOI01==7 | TOI01==9 ~ 1,
+                             TOI01==8 | TOI01==10 | TOI01==11 | TOI01==12 | TOI01==96 ~ 0,
+                             TRUE ~ NA_real_)
+  ) %>%
+  mutate(toi_cond2=case_when(
+    TOI02==1 & (TOI03==5 |TOI03==96 | TOI03==98) ~ 0, #Unsafe disposal
+    TOI02==1 & (TOI03==1 |TOI03==2 |TOI03==3 |TOI03==4 ) ~ 1, #safe
+    TOI02==2 ~ 0, TOI02==98 ~ 0, TRUE ~ NA_real_)
+  ) %>%
+  mutate(toi_cond3=case_when(
+    TOI05==1 ~ 0, TOI05==0 ~ 1) # toilet not shared with other households
+  ) %>%
+  
+  ###Combine all three conditions below
+  ### improved sanitation facility / Safe disposal in situ of excreta from on-site sanitation facilities / not shared with other HHs
+  
+  mutate(outcome12_2=case_when(
+    toi_cond1==1| toi_cond2==1 |toi_cond3==1 ~ 1,
+    TRUE ~ 0)
+  ) %>%
+  mutate(outcome12_2 = labelled(outcome12_2,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "This indicator measures the proportion of people with access to at least basic sanitation services."))
+
+
+
+##Descriptives
+
+
+#count
+table(main$outcome12_2)
+
+
+##Percentages
+
+table_outcome12_2 <- table(main$outcome12_2, main$pop_groups)
+percentage_outcome12_2 <- prop.table(table_outcome12_2, margin = 2) * 100
+
+percentage_outcome12_2
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome12_2), fill = factor(outcome12_2))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people with access to a safe household toilet",
+       x = "People with access to a safe household toilet",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+
+
+
+# Create a bar chart with percentages and disaggregated by 'pop_groups'
+
+ggplot(main, aes(x = factor(outcome12_2), fill = factor(outcome12_2))) +
+  geom_bar(position = "fill", show.legend = FALSE) +
+  facet_wrap(~pop_groups, scales = "free_y") +
+  labs(title = "Proportion of people with access to a safe household toilet",
+       x = "People with access to a safe household toilet",
+       y = "Percentage") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +  # Format y-axis as percentages
+  theme_minimal()
+
+
+
+###13.1 Proportion of people with an account at a bank or other financial institution or with a mobile-money-service provider
+
+main$BANK01 <- labelled_chr2dbl(main$BANK01)
+main$BANK02 <- labelled_chr2dbl(main$BANK02)
+main$BANK03 <- labelled_chr2dbl(main$BANK03)
+main$BANK04 <- labelled_chr2dbl(main$BANK04)
+main$BANK05 <- labelled_chr2dbl(main$BANK05)
+
+main <- main %>%
+  mutate(
+    outcome13_1 = case_when(
+      BANK01==1 | BANK02== 1 | BANK03==1 |BANK05==1 ~ 1,
+      BANK01==0 & BANK02==0 & BANK03==0 & BANK05==0 ~ 0,
+      TRUE ~ 0)
+  ) %>%
+  mutate(outcome13_1 = labelled(outcome13_1,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "Proportion of people with an account at a bank or other financial institution or with a mobile-money-service provider"))
+
+##Descriptives
+
+
+#count
+table(main$outcome13_1)
+
+
+##Percentages
+
+table_outcome13_1 <- table(main$outcome13_1, main$HH04)
+percentage_outcome13_1 <- prop.table(table_outcome13_1, margin = 2) * 100
+
+percentage_outcome13_1
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome13_1), fill = factor(outcome13_1))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people with an account at a bank or other financial institution or with a mobile-money-service provider",
+       x = "People with an account at a bank or other financial institution",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+
+
+###13.2 Proportion of people who self-report positive changes in their income compared to previous year
+##Module :INC01 - INC02
+
+###To calculate the indicator value, the standard survey methodology considers 
+###for the numerator only individuals who state their income increased and 
+##who can also afford more goods and services, or those whose income 
+##remained the same or decreased but who can still afford more goods 
+##and services (to account for possible inflation).
+
+main$INC01 <- labelled_chr2dbl(main$INC01)
+main$INC02 <- labelled_chr2dbl(main$INC02)
+
+main <- main %>%
+  mutate(outcome13_2=case_when(
+    INC01==1 & INC02==1 ~ 1, #income increased and can effort more
+    (INC01==2 | INC01==3) & INC02==1 ~ 1,#income decreased/same and can effort more
+    TRUE ~ 0)
+  ) %>%
+  mutate(outcome13_2 = labelled(outcome13_2,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "Proportion of people who self-report positive changes in their income compared to previous year"))
+
+##Descriptives
+
+
+#count
+table(main$outcome13_2)
+
+
+##Percentages
+
+table_outcome13_2 <- table(main$outcome13_2, main$HH04)
+percentage_outcome13_2 <- prop.table(table_outcome13_2, margin = 2) * 100
+
+percentage_outcome13_2
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome13_2), fill = factor(outcome13_2))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people who self-report positive changes in their income compared to previous year",
+       x = "People who self-report positive changes in their income compared to previous year",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+
+
+###13.3 Proportion of people (working age) who are unemployed
+
+###Turn into numeric variables
+
+main$UNEM01 <- labelled_chr2dbl(main$UNEM01)
+main$UNEM02 <- labelled_chr2dbl(main$UNEM02)
+main$UNEM03 <- labelled_chr2dbl(main$UNEM03)
+main$UNEM04 <- labelled_chr2dbl(main$UNEM04)
+main$UNEM05 <- labelled_chr2dbl(main$UNEM05)
+main$UNEM06 <- labelled_chr2dbl(main$UNEM06)
+main$UNEM07 <- labelled_chr2dbl(main$UNEM07)
+main$UNEM08 <- labelled_chr2dbl(main$UNEM08)
+main$UNEM09 <- labelled_chr2dbl(main$UNEM09)
+main$UNEM10 <- labelled_chr2dbl(main$UNEM10)
+
+
+main <- main %>%
+  mutate(employed = case_when(
+    UNEM01 == 1 ~ 1,
+    UNEM02 == 1 & UNEM07 == 3 ~ 1,
+    UNEM04 == 1 ~ 1,
+    UNEM02 == 1 & UNEM07 == 1 & (UNEM08 == 1 | UNEM08 == 2) ~ 1,
+    UNEM05 == 1 & UNEM06 == 3 ~ 1,
+    UNEM05 == 1 & (UNEM06 == 1 | UNEM06 == 2) & (UNEM08 == 1 | UNEM08 == 2) ~ 1,
+    TRUE ~ 0
+  )) %>%
+  mutate(outcome13_3 = case_when(
+    employed == 0 & UNEM09 == 1 & UNEM10 == 1 ~ 1,
+    TRUE ~ 0
+  )) %>%
+  mutate(outcome13_3 = factor(outcome13_3,
+                              levels = c(0, 1),
+                              labels = c("No", "Yes"))
+  )
+
+table(main$employed)
+
+
+##Descriptives
+
+
+#count
+table(main$outcome13_3)
+
+
+##Percentages
+
+table_outcome13_3 <- table(main$outcome13_3, main$HH04)
+percentage_outcome13_3 <- prop.table(table_outcome13_3, margin = 2) * 100
+
+percentage_outcome13_3
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome13_3), fill = factor(outcome13_3))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people (working age) who are unemployed",
+       x = "People (working age) who are unemployed",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+###by sex 
+
+ggplot(main, aes(x = factor(outcome13_3), fill = factor(outcome13_3))) +
+  geom_bar(position = "dodge", show.legend = FALSE) +
+  facet_wrap(~HH04, scales = "free_y") +
+  labs(title = "Proportion of people (working age) who are unemployed",
+       x = "People (working age) who are unemployed",
+       y = "Percentage") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  theme_minimal()
+
+
+
+###14.1 Proportion of returnees with legally recognized identity documents or credentials
+##Module :REG01 - REG02 - REG03 / REG05 - REG06 
+
+###DISAGGREGATE FOR REFUGEE RETURNEES ONLY 
+
+###Calculate valid identity documents for under 5 with REG05 and REG06 variables
+
+class(ind$pop_groups)
+
+#ind$REG05a - passport
+#ind$REG05b - civil/government issued ID
+#ind$REG05c - residency permit
+#ind$REG05d - statelessness documentation
+#ind$REG05e - household card of address/family book
+#ind$REG05f - social security card
+#ind$REG06 - any other document establishes identity
+#add birth certificate as additional document from REG03
+
+ind <- ind %>%
+  mutate(document_under5=case_when(
+    REG05a==1 | REG05b==1 | REG05c==1 | REG05d==1 | REG05e==1 | REG05f==1 |REG06==1 | REG03==1 ~ 1, 
+    REG05a==0 & REG05b==0 & REG05c==0 & REG05d==0 & REG05e==0 & REG05f==0 & REG06==0 & REG03==0 ~ 0, TRUE ~ NA_real_
+  ))
+
+###Calculate  valid identity documents for above 5 with REG01 and REG02 variables
+
+
+#ind$REG01a # passport
+#ind$REG01b # birth certificate
+#ind$REG01c # civil/ government issued ID
+#ind$REG01d # residency permit
+#ind$REG01e # statelessness documentation
+#ind$REG01f # household card of address/family book
+#ind$REG01g # social security card
+#ind$REG02 # any other document establishes identity
+
+ind <- ind %>%
+  mutate(
+    document_above5 = case_when(
+      REG01a == 1 | REG01b == 1 | REG01c == 1 | REG01d == 1 | REG01e == 1 | REG01f == 1 | REG01g == 1 | REG02 == 1 ~ 1,
+      REG01a == 0 & REG01b == 0 & REG01c == 0 & REG01d == 0 & REG01e == 0 & REG01f == 0 & REG01g == 0 & REG02 == 0 ~ 0,
+      TRUE ~ NA_real_
+    ),
+    ## Combine both age groups
+    outcome14_1 = case_when(
+      pop_groups=="4" & (document_above5 == 1 | document_under5 == 1) ~ 1,
+      pop_groups=="4" & (document_above5 == 0 | document_under5 == 0) ~ 0,
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  mutate(
+    outcome14_1 = labelled(outcome14_1,
+                           labels = c(
+                             'Yes' = 1,
+                             'No' = 0
+                           ),
+                           label = "Proportion of returnees with legally recognized identity documents or credentials" )
+)
+##Descriptives
+
+
+
+#count
+
+table(ind$outcome14_1)
+
+##Percentages
+
+table_outcome14_1 <- table(ind$outcome14_1)
+percentage_outcome14_1 <- prop.table(table_outcome14_1, margin = 2) * 100
+
+percentage_outcome14_1
+
+
+
+
+###16.1 Proportion of people with secure tenure rights to housing and/or land
+##Module :DWE06_land – DWE06a_land – DWE07_land - DWE06_housing – DWE06a_housing – DWE07_housing – DWE10
+
+main$DWE06a_land <- labelled_chr2dbl(main$DWE06a_land)
+main$DWE06a_housing <- labelled_chr2dbl(main$DWE06a_housing)
+main$DWE10 <- labelled_chr2dbl(main$DWE10)
+
+# likelihood of losing right for housing is unlikely
+# Have the documentation both for land and housing
+
+
+
+main <- main %>%
+  mutate(outcome16_1 = case_when(
+    (DWE10 == 1 | DWE10 == 2) & (DWE06a_land == 1 & DWE06a_housing == 1) ~ 1, 
+    DWE06a_land == 0 | DWE06a_housing == 0 | DWE10 == 3 | DWE10 == 4 ~ 0,
+    TRUE ~ NA_real_
+  )) %>%
+  mutate(outcome16_1 = labelled(outcome16_1,
+                                labels = c("No" = 0, "Yes" = 1),
+                                label = "Proportion of people with secure tenure rights to housing and/or land"))
+
+
+
+##Descriptives
+
+
+#count
+table(main$outcome16_1)
+
+
+##Percentages
+
+table_outcome16_1 <- table(main$outcome16_1, main$pop_groups)
+percentage_outcome16_1 <- prop.table(table_outcome16_1, margin = 2) * 100
+
+percentage_outcome16_1
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome16_1), fill = factor(outcome16_1))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people with secure tenure rights to housing and/or land",
+       x = "People with secure tenure rights to housing and/or land",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+
+
+
+# Create a bar chart with percentages and disaggregated by 'pop_groups'
+
+ggplot(main, aes(x = factor(outcome16_1), fill = factor(outcome16_1))) +
+  geom_bar(position = "fill", show.legend = FALSE) +
+  facet_wrap(~pop_groups, scales = "free_y") +
+  labs(title = "Proportion of people with secure tenure rights to housing and/or land",
+       x = "People with secure tenure rights to housing and/or land",
+       y = "Percentage") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +  # Format y-axis as percentages
+  theme_minimal()
+
+
+
+###16.2 Proportion of people covered by national social protection systems
+##Module :UNHCR Core Indicator Metadata	SPF01
+
+
+main <- main %>%
+  mutate(across(starts_with("SPF01"), labelled_chr2dbl)) %>%
+  rowwise() %>%
+  mutate(outcome16_2 = case_when(
+    any(c_across(starts_with("SPF01")) == 1) ~ 1,
+    all(c_across(starts_with("SPF01")) == 0) ~ 0,
+    TRUE ~ 0 )
+  ) %>%
+  mutate(outcome16_2=labelled(outcome16_2,
+                              labels=c(
+                                'Yes'=1,
+                                'No'=0
+                              ),
+                              label="Proportion of people covered by national social protection systems")) 
+
+##Descriptives
+
+
+#count
+table(main$outcome16_2)
+
+
+##Percentages
+
+table_outcome16_2 <- table(main$outcome16_2, main$pop_groups)
+percentage_outcome16_2 <- prop.table(table_outcome16_2, margin = 2) * 100
+
+percentage_outcome16_2
+
+
+
+##Chart
+
+ggplot(main, aes(x = factor(outcome16_2), fill = factor(outcome16_2))) +
+  geom_bar(stat = "count", position = "stack", show.legend = FALSE) +
+  labs(title = "Proportion of people covered by national social protection systems",
+       y = "Count") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  theme_minimal()
+
+
+
+
+
+# Create a bar chart with percentages and disaggregated by 'pop_groups'
+
+ggplot(main, aes(x = factor(outcome16_1), fill = factor(outcome16_1))) +
+  geom_bar(position = "fill", show.legend = FALSE) +
+  facet_wrap(~pop_groups, scales = "free_y") +
+  labs(title = "Proportion of people covered by national social protection systems",
+       x = "People covered by national social protection systems",
+       y = "Percentage") +
+  scale_x_discrete(labels = c("No" = 0, "Yes" = 1)) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +  # Format y-axis as percentages
+  theme_minimal()
+
