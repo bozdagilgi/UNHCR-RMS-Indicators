@@ -7,7 +7,14 @@
 rm(list = ls())
 
 
-#### Load packages
+#install
+install.packages("ggplot2")
+install.packages('visdat')
+install.packages("remotes")
+install.packages("DiagrammeR")
+install.packages('dplyr')
+remotes::install_github("dickoa/robotoolbox")
+
 
 
 
