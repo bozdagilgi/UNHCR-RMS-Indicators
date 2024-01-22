@@ -1172,7 +1172,8 @@ ggplot(main, aes(x = factor(outcome10_2), fill = factor(outcome10_2))) +
 ###12.1 Proportion of people using at least basic drinking water services
 ##Module :DWA01-DWA03
 
-##Turn into numeric
+
+#Turn into numeric
 
 
 main$DWA01 <- labelled_chr2dbl(main$DWA01)
@@ -1181,7 +1182,7 @@ main$DWA03a <-labelled_chr2dbl(main$DWA03a)
 main$DWA03b <-labelled_chr2dbl(main$DWA03b)
 
 ###There are three conditions as below 
-##improved source, in dwelling/yard/plot and reachable under 30 minutes 
+##improved source, in dwelling/yard/plot or reachable under 30 minutes 
 
 main <- main %>%
   mutate(time_DWA=case_when(
@@ -1199,14 +1200,15 @@ main <- main %>%
                              TRUE ~ 1) # in the dwelling/yard/plot
   ) %>% 
   mutate(outcome12_1=case_when(
-    (dwa_cond1==1 & dwa_cond2==1 & dwa_cond3==1) ~ 1, TRUE ~ 0)
+    ((dwa_cond1==1 | dwa_cond3==1) & dwa_cond2==1 ) ~ 1, TRUE ~ 0)
   ) %>%
-  mutate(outcome12_1 = labelled(drinkingwater,
+  mutate(outcome12_1 = labelled(outcome12_1,
                                 labels = c(
                                   "Yes" = 1,
                                   "No" = 0
                                 ),
                                 label = "Proportion of people using at least basic drinking water services"))
+  
 
 ##Descriptives
 
