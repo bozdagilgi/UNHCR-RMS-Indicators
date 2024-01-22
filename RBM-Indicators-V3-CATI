@@ -1465,7 +1465,6 @@ main$UNEM08 <- labelled_chr2dbl(main$UNEM08)
 main$UNEM09 <- labelled_chr2dbl(main$UNEM09)
 main$UNEM10 <- labelled_chr2dbl(main$UNEM10)
 
-
 main <- main %>%
   mutate(employed = case_when(
     UNEM01 == 1 ~ 1,
@@ -1478,13 +1477,12 @@ main <- main %>%
   )) %>%
   mutate(outcome13_3 = case_when(
     employed == 0 & UNEM09 == 1 & UNEM10 == 1 ~ 1,
-    TRUE ~ 0
+    employed == 1 ~ 0,
+    TRUE ~ NA
   )) %>%
   mutate(outcome13_3 = factor(outcome13_3,
                               levels = c(0, 1),
                               labels = c("No", "Yes"))
-  )
-
 table(main$employed)
 
 
