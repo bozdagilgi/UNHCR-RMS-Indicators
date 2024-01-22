@@ -396,7 +396,7 @@ HH04_labels <- c(
   "99" = "Prefer not to respond"
 )
 
-main <- main %>%
+ind <- ind %>%
   mutate(HH04 = recode_factor(HH04, !!!setNames(as.character(HH04_labels), as.character(seq_along(HH04_labels)))))
 
 
