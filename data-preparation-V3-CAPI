@@ -226,7 +226,7 @@ table(ind$idp_valid)
 ####Refugees and Asylum Seekers
 
 ###You should check the primary citizenship of all household members and confirm that 
-####refugees and asylum seekers are citizens of the country of enumeration
+####refugees and asylum seekers are NOT the citizens of the country of enumeration
 
 ###Primary citizenship
 
