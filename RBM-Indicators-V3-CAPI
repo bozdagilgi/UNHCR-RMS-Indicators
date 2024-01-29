@@ -141,7 +141,7 @@ main <- main %>%
                              TRUE ~ 1) # in the dwelling/yard/plot
   ) %>% 
   mutate(drinkingwater=case_when(
-    (dwa_cond1=="1" & dwa_cond2=="1" & dwa_cond3=="1") ~ 1, TRUE ~ 0)
+    ((dwa_cond1==1 | dwa_cond3==1) & dwa_cond2==1 ) ~ 1, TRUE ~ 0)
   ) %>%
   mutate(drinkingwater = labelled(drinkingwater,
                                   labels = c(
@@ -348,7 +348,7 @@ ind<- ind %>%
     EDU01==1 & EDU02==1 & EDU03==2 ~ 1, EDU01==0 | EDU02==0 ~ 0, TRUE ~ 0)
   ) %>%
   mutate(age_primary=case_when(
-    HH07 >= 6 & HH07 <=10 ~ 1, TRUE ~ NA_real_) #Adjust age group for primary school  enrollment 
+    HH07 >= 6 & HH07 <=10 ~ 1, TRUE ~ 0) #Adjust age group for primary school  enrollment 
   ) %>%
   mutate(impact3_2a=sum(edu_primary)/sum(age_primary)
   ) %>%
@@ -389,7 +389,7 @@ ind <- ind %>%
     TRUE ~ 0)
   ) %>%
   mutate(age_secondary=case_when(
-    HH07 >= 11 & HH07 <=18 ~ 1, TRUE ~ NA_real_)
+    HH07 >= 11 & HH07 <=18 ~ 1, TRUE ~ 0)
     
     #Adjust age group for secondary school enrollment 
     ##calculated as 11 to 18 above 
