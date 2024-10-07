@@ -42,15 +42,15 @@ pacman::p_load(
 
 
 ###Enter your KoBo username and password
-kobo_token(username = "rms_hq",
-           password = "RBMindicators2024!",
+kobo_token(username = "xxxxx",
+           password = "xxxxx",
            url = "https://kobo.unhcr.org")
 
 
 ###Once you enter, you will receive your token from KoBO which you need to insert as below
 
 kobo_setup(url = "https://kobo.unhcr.org",
-           token = "f06f983860da35abbf2574611c058b22fe8ea302")
+           token = "xxxxx")
 
 ###Run the script below to see list of your surveys 
 asset_list <- kobo_asset_list()
