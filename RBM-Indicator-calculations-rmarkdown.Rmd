@@ -1,0 +1,4098 @@
+---
+title: "RMS Questionnaire v3.2- Indicator Calculations (Step 2)" 
+output:
+  unhcrdown::html_page:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+---
+
+
+Date: Last revision was on October 2024 
+
+*For any issues please contact Ilgi Bozdag at bozdag@unhcr.org*
+
+
+* 🔗 **GitHub Repositories:**
+    + [Main link](https://github.com/bozdagilgi/UNHCR-RMS-Indicators)
+    + [CAPI v3.2 Data Preparation](https://github.com/bozdagilgi/UNHCR-RMS-Indicators/blob/main/RBM-Data-Preparation-V3.2-CAPI.R)
+    + [CAPI v3.2 RBM Indicators](https://github.com/bozdagilgi/UNHCR-RMS-Indicators/blob/main/RBM-Indicators-V3.2-CAPI.R)
+    
+**The above refers to the v3.2 RMS questionnaire, which is the final version. For all other versions, please visit the main link**  
+
+
+**If the provided link above is not opening automatically, please right-click and copy the link manually!**
+
+*Important Instructions:*
+
+1. For correct calculations, ensure you have two datasets named 'main' and 'ind' following the guidance provided in the data preparation [Rmarkdown document (Step 1)](https://rstudio.unhcr.org/data-preparation/). If not, please revisit the document to prepare your dataset. Adjust the script below if you've made changes to the RMS standard questionnaire.
+
+2. Confirm that your datasets are cleaned and weighted as required for accurate results!
+
+3. You can find all guidance pieces related to RMS on [Intranet](https://intranet.unhcr.org/en/support-services/common-good-data-initiatives/household-surveys/rms/rms-guidance-tools.html)
+
+4. This version covers only CAPI v3.2 questionnaire, for CATI please refer to the github link above.
+
+
+# RBM Core Impact and Outcome Indicators
+
+There is broad consensus around the key indicators used to measure, inform and monitor progress towards global development objectives, as exemplified by the Sustainable Development Goals and related efforts of the MICS, DHS, IHSN, together with national governments.
+UNHCR's objectives are largely aligned with these frameworks.
+
+[The Results Monitoring Surveys (RMS)](https://intranet.unhcr.org/en/support-services/common-good-data-initiatives/household-surveys/rms.html) are household-level surveys with standard questionnaires following context-appropriate methodological approaches.
+They can be implemented across UNHCR operations to monitor changes in the lives of all relevant groups of persons of concern (impacts) and in UNHCR's key areas of engagement (outcomes). 
+
+RMS help us to calculate impact and outcome indicators in a standardized way to have a global understanding of the results. Both indicators and questionnaire is also largely aligned with MICS, DHS, IHSN, national household surveys and other UNHCR standardized surveys.
+
+This document will guide you on how each and every indicator will be calculated with the standard questionnaire module corresponding to each indicator.
+
+**Population** refers to survey population in this guidance for the calculation of indicators as shown by enumerator and denominator.
+
+**How to calculate an indicator?** In the calculation of a percentage or rate, the denominator is often the total number of observations, events, or units in the population or sample being studied. The numerator, on the other hand, represents the specific part or subset of interest.
+
+Percentage = \(\left(\frac{\text{Numerator}}{\text{Denominator}}\right) \times 100\)
+
+
+
+*At this step, you should already have main and ind datasets structured in a way that will allow you to calculate your indicators as you will be guided in this document. It's not recommended to clear your work space.*
+
+
+```{r, eval=FALSE}
+
+# Install pacman if not already installed
+if(!require(pacman)) install.packages('pacman')
+
+# Install the unhcrthemes package from GitHub
+install.packages("remotes")
+remotes::install_github("unhcr/unhcrthemes")
+
+
+# Load all required libraries using pacman
+pacman::p_load(
+  tidyverse, dplyr, tidyr, rlang, purrr, magrittr, expss, srvyr,
+  readr,labelled,pastecs,psych,tableone, outbreaks, ggplot2, unhcrthemes,
+  scales, gt,webshot2, sjlabelled, waffle, writexl,remotes )
+
+```
+
+
+Please run the following tables to ensure that all necessary disaggregation variables are included for RBM reporting.
+
+```{r, eval=FALSE}
+
+###Add labels for disaggregation variables
+
+###Age - HH07_cat
+
+table(ind$HH07_cat) # 4 categories
+table(ind$HH07_cat2) # under 18 / above 18
+
+##Disability - disability
+
+table(ind$disability)
+
+###Gender - HH04 -- already labelled 
+
+table(ind$HH04)
+
+
+###Population groups
+
+table(ind$pop_groups)
+table(main$pop_groups)
+
+```
+
+## 2.2 Core Impact Indicator
+
+**Core Impact 2.2 Proportion of people residing in physically safe and secure settlements with access to basic facilities**
+
+This indicator aims to measure the proportion of forcibly displaced and stateless people that reside in safe and secure settlements with access to basic facilities such as shelter, WASH, energy and security from natural hazards.
+
+To facilitate measurement for UNHCR, four basic services are considered for this indicator: shelter, drinking water, energy (access to electricity) and health. All of these basic services must be available to people for it to be considered that they have access to basic services.
+
+This indicator is linked to the SGD indicator [1] and [11](https://unstats.un.org/sdgs/metadata/?Text=&Goal=11&Target=).
+
+
+
+| Services       | Standard Module |
+|----------------|:---------------:|
+| Electricity    | LIGHT01-LIGHT03 |
+| Health care    |   HEA01-HEA03   |
+| Drinking water |   DWA01-DWA04   |
+| Shelter        | SHEL01-06-DWE05 |
+
+
+### 1. Calculate variables for access to four basic services {.tabset}
+
+**Click on services below to see how they are calculated**
+
+#### Electricity
+
+Households lighting provides a sense of safety and security within and outside the households after sunset.
+If households lack access to electricity, especially for lighting and connectivity, this affects the occupants' security and limits their opportunities for socialization, learning and self-reliance.
+
+**Numerator**: Number of individuals with access to electricity
+
+**Denominator**: Total number of individuals
+
+
+
+```{r, eval=FALSE}
+
+##Here we will create a binary variable if they use anything for lighting (LIGHT01), and the light source for most of the time is electricity (LIGHT02) - exclude cases if they selected LIGHT03 - 0 ( no electricity)
+
+table(main$LIGHT01)
+table(main$LIGHT02)
+
+
+
+main <- main %>%
+  mutate(electricity = ifelse(LIGHT01 == "1" & LIGHT02 == "1" & LIGHT03 != "0", 1, 0)
+  ) %>%
+  mutate( electricity = labelled(electricity,
+                                 labels = c(
+                                   "Yes" = 1,
+                                   "No" = 0
+                                 ),
+                                 label = "Access to electricity"))
+
+table(main$electricity)
+
+
+```
+
+#### Healthcare
+
+Access to healthcare depends on availability of healthcare, including physical reach, acceptability and affordability for all.
+For this indicator, the focus is on the availability of healthcare system.
+According to [The Sphere Handbook](https://spherestandards.org/wp-content/uploads/Sphere-Handbook-2018-EN.pdf), primary healthcare facility should be accessible within one hour's walk from dwellings.
+
+**Numerator**: Individuals that can reach a primary healthcare facility within one hour from dwellings
+
+**Denominator**: Total number of individuals
+
+
+```{r, eval=FALSE}
+
+###Access to healthcare if household has any facility available excluding 'don't know' and 'other' 
+#within one hour distance (cannot be > 60) (walking or any other type of transport)
+ 
+
+
+main <- main %>%
+  mutate(healthcare = ifelse(HEA01 != "96" & HEA01 != "98" & HEA03 <= 60, 1, 0)
+  ) %>%
+  mutate( healthcare = labelled(healthcare,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "Access to healthcare facility"))
+
+table(main$healthcare)
+```
+
+#### Drinking water
+
+Access to clean drinking water is essential for a person's survival and well being and a precursor for achieving protection outcomes related to health, education and economic developed.
+The calculation for access drinking water is linked to SGD Indicator [6.1.1](https://unstats.un.org/sdgs/metadata/files/Metadata-06-01-01.pdf).
+The questionnaire module and the analysis guidance is taken from [UNICEF MICS6](https://mics.unicef.org/tools#analysis).
+
+**Numerator**: Population using improved sources of drinking water either in their dwelling/yard/plot or within 30 minutes round trip collection time
+
+**Denominator**: Total number of individuals
+
+```{r , eval=FALSE}
+
+###Access to drinking water is calculated as below
+##use improved sources of drinking water in their housing or within 30 minutes round trip collection time
+
+
+###Convert time variable to minutes only
+
+
+main <- main %>%
+  mutate(time_DWA=case_when(
+    DWA03a=="1"~ "1", DWA03a=="2"~"60") #convert hour into minutes
+  )
+
+main$time_DWA <- as.numeric(main$time_DWA)
+
+table(main$time_DWA)
+
+###Compute variable with above conditions
+
+main <- main %>%
+  mutate(time_tot=time_DWA*DWA03b
+  ) %>% 
+  mutate(dwa_cond1=case_when( time_tot > 30 ~ 0, 
+                              TRUE ~ 1) # reachable under 30 minutes or NA
+  ) %>% 
+  mutate(dwa_cond2=case_when(DWA01!="7" |DWA01 !="9" |DWA01 != "13" | DWA01 != "96" |DWA01 !="98" ~ 1,
+                             TRUE ~ 0) # improved source only
+  ) %>%
+  mutate(dwa_cond3=case_when(DWA02 == "3" ~ 0, 
+                             TRUE ~ 1) # in the dwelling/yard/plot
+  ) %>% 
+  mutate(drinkingwater=case_when(
+    ((dwa_cond1==1 | dwa_cond3==1) & dwa_cond2==1 ) ~ 1, TRUE ~ 0)
+  ) %>%
+  mutate(drinkingwater = labelled(drinkingwater,
+                                  labels = c(
+                                    "Yes" = 1,
+                                    "No" = 0
+                                  ),
+                                  label = "Access to drinking water"))
+
+table(main$drinkingwater)
+
+
+```
+
+#### Habitable housing
+
+Habitable housing refers to the presence of adequate space which is defined by the minimum emergency standards. Habitable housing also refers to the fact that the housing should provide protection from cold, damp, heat, rain, wind, and other threats to health, structural hazards, and disease vectors. It should provide physical safety to its occupants. This indicator does not measure ‘adequate’ housing but focuses on whether housing is livable.
+
+
+**Numerator**: Individuals that are living in habitable housing
+
+**Denominator**: Total number of individuals
+
+
+
+```{r , eval=FALSE}
+
+##Condition 1
+
+##Classify as habitable for below conditions - if 98 selected, put into missing
+
+##First check the variables
+
+table(main$SHEL01)
+table(main$SHEL02)
+table(main$SHEL03)
+table(main$SHEL04)
+table(main$SHEL05)
+table(main$SHEL06)
+
+
+main <- main %>%
+  mutate(across(starts_with("SHEL"), ~ifelse(. == "98", NA, .))) %>%
+  mutate(housing = case_when(
+    (SHEL01 == "1") & (SHEL02 == "1") & (SHEL05 == "1") & 
+      (SHEL03 == "0" ) & (SHEL04 == "0" ) & (SHEL06 == "0" ) ~ 1,
+    (SHEL01 == "0") | (SHEL02 == "0" ) | (SHEL05 == "0") |
+      (SHEL03 == "1") | (SHEL04 == "1") | (SHEL06 == "1" ) ~ 0,
+    TRUE ~ NA_integer_
+  ))
+
+table(main$housing)
+
+
+##Condition 2
+####Calculate crowding index - overcrowded when more than 3 persons share one room to sleep
+###Overcrowding may cause health issues, thus not considered as physically safe
+
+
+table(main$hh_size_001)
+table(main$DWE05)
+
+
+main <- main %>%
+  mutate(crowding=hh_size_001/DWE05
+  ) %>%
+  mutate(dwe05_cat=case_when( ##if crowding <= 3, not overcrowded 
+    crowding <= 3 ~ 1, TRUE ~ 0)
+  )
+
+
+table(main$crowding)
+table(main$dwe05_cat)
+
+
+###Combine both conditions for habitable housing -- exclude DWE01
+
+main <- main %>%
+  mutate(shelter=case_when(
+    dwe05_cat==1 & housing==1 ~ 1,
+    TRUE ~ 0
+  ))
+
+table(main$shelter)
+
+
+```
+
+
+
+### 2. Combine all variables calculated above
+
+After computing the variables for electricity, healthcare, drinking water, and adequate shelter, it's advisable to review the values of each variable before proceeding with the calculation of the 2.2 impact indicator. The frequencies for each variable are provided below for your reference.
+
+```{r, eval=FALSE}
+
+
+table(main$electricity)
+table(main$shelter)
+table(main$drinkingwater)
+table(main$healthcare)
+
+```
+
+
+After computing the four basic services, we will include an assessment of whether individuals reside in physically safe and secure environments
+
+```{r, eval=FALSE}
+
+##Step 5. Safe and secure settlements are those with no risks and hazards like flooding, landslides, landmines, and close proximity to military installations and hazardous zones
+
+table(main$RISK01)
+table(main$RISK02)
+
+
+main <- main %>%
+  mutate(secure=case_when(
+    RISK01=="1" |  RISK02=="1" ~ 0,
+    TRUE ~ 1
+  ))
+
+table(main$secure)
+
+```
+
+
+Once all five variables are correctly calculated, we can compute the final variable for the core impact 2.2 indicator.
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals in safe and secure settlements with access to basic services
+
+**Denominator**: Total number of individuals
+
+To calculate the indicator value, the standard RMS methodology considers in the numerator only individuals in households that can reach a primary healthcare facility within one hour from their housing, have access to electricity for lighting, use improved sources of drinking water in their housing or within 30 minutes round trip collection time, live in habitable housing and in safe and secure settlements, i.e., neighbourhoods (proxied through flooding and landmines).
+
+```{r , eval=FALSE}
+###Calculate impact indicator based on electricity, healthcare, drinkingwater, shelter and secure
+
+##Impact 2.2 is "1" if all services above are accessible
+
+main <-main %>%
+  mutate(impact2_2=case_when(
+    shelter==0 | electricity==0 | drinkingwater==0 | healthcare==0 | secure==0 ~ 0,
+    shelter==1 & electricity==1 & drinkingwater==1 & healthcare==1 & secure==1 ~ 1)
+  ) %>% 
+  mutate(impact2_2=labelled(impact2_2,
+                            labels =c(
+                              "Yes"=1,
+                              "No"=0
+                            ),
+                            label="Proportion of people residing in physically safe and secure settlements with access to basic facilities"))
+
+
+table(main$impact2_2)
+
+
+
+```
+
+Once you have the variable, you can run the descriptive statistics for the indicator variable as below. 
+
+```{r, eval=FALSE}
+
+####Rerun to have the dataset with indicators 
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+
+####Standard tables 
+
+
+composite_impact2_2 <- main %>%
+  select(pop_groups, shelter, electricity, drinkingwater, secure, healthcare, impact2_2) %>%
+  pivot_longer(cols = shelter:healthcare, names_to = "facility", values_to = "access") %>%
+  group_by(pop_groups, facility) %>%
+  summarise(percentage = mean(access, na.rm = TRUE) * 100) %>%
+  ungroup()
+
+
+
+###Chart for above with all dimensions 
+
+
+composite_impact2_2 %>%
+  ggplot(aes(x = facility, y = percentage, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_unhcr_d() +
+  scale_y_continuous(limits = c(0, 100), expand = c(0, 0)) +
+  labs(
+    title = "Access to Facilities by Population Group",
+    x = "Facility",
+    y = "Percentage Access (%)",
+    fill = "Population Groups"
+  ) +
+  theme_unhcr()
+
+##Table by population groups
+
+impact2_2 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Show results disaggregated by pop groups
+  summarise(                                         # put all variables here
+    var_name = "impact2_2",                          # name of the variable
+    num_obs_uw = unweighted(n()),                    # unweighted total count
+    denominator = survey_total(),                      # weighted total count
+    mean_value = survey_mean(impact2_2, vartype = c("ci", "se"), , na.rm = TRUE),  # indicator value ( weighted) with CI and SE
+  )
+
+
+
+
+###Chart of impact 2_2 by pop groups
+
+ggplot(impact2_2, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  # Add labels for mean_value
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Impact 2.2",
+    x = "Population Groups",
+    y = "Mean Value with Standard Errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+
+```
+
+### How to calculate 2.2 Impact indicator if the standard questionnaire was not used?
+
+All questions for the calculation of this indicator are standardized and taken from global household surveys which has been tested in various contexts.
+As a result, contextualization is not allowed to make sure to have global results.
+However, if your RMS was integrated with with another survey and there were similar questions, it is possible to calculate the indicator from these questions as a proxy.
+In that case, you will need to adjust above scripts accordingly.
+
+
+## 2.3 Core Impact Indicator
+
+**Proportion of people with access to health services**
+
+This indicator measures access to essential primary health care services for forcibly displaced and stateless people in need of health services. Health services refers to preventive, promotive, curative, rehabilitative and palliative health services.
+
+| Standard Questions |
+|:------------------:|
+|  HACC01 - HACC04   |
+
+*Unit of observation*: Individual
+
+*Numerator*: Number of individuals who received the health care they needed in the previous 3 months
+
+*Denominator*: Total number of individuals who needed health care services in the previous 3 months
+
+Three months is the standard recall period to use for this indicator.
+The standard survey/RMS methodology for this indicator entails asking households whether any household member needed to see health professionals in the past three months, their reasons for seeking consultation and whether they received the needed medical attention, and if not, reasons for not receiving this. Individuals who chose not to seek services are excluded from the calculation.
+Healthcare can be delivered through a combination of community level, mobile and fixed healthcare facilities.
+
+
+```{r, eval=FALSE}
+
+
+table(ind$HACC01) ## Needed to see a health professional for any reason
+table(ind$HACC02) ## the reason for seeking care
+table(ind$HACC03) ## did receive the needed health care
+table(ind$HACC04) ## if not, what are the reasons for not receiving the health care
+
+
+##Calculate those who needed and accessed health services
+
+ind <- ind %>%
+  mutate(impact2_3=case_when(
+    HACC01=="1" & HACC03=="1" ~ 1,
+    HACC01=="0" ~ NA,
+    HACC01=="1" & HACC03=="0" & (HACC04_1 == "1" | HACC04_2 == "1" | HACC04_4 == "1" | HACC04_7 == "1" | HACC04_10 == "1" | HACC04_11 == "1" | 
+                                   HACC04_12 == "1" | HACC04_13 == "1") ~ 0 ,
+    HACC01=="1" & HACC03=="0" & (HACC04_3 == "1" | HACC04_5 == "1" | HACC04_6 == "1" | HACC04_8 == "1" | 
+                                   HACC04_9 == "1" | HACC04_96 == "1") ~ 1)
+  ) %>%
+  mutate(impact2_3=labelled(impact2_3,
+                            labels =c(
+                              "Yes"=1,
+                              "No"=0
+                            ),
+                            label="Proportion of people with access to health services"))
+
+
+
+
+```
+
+Once you have the indicator, you can run descriptive statistics as below.
+Individuals who didn't need to seek any health services in the last 3 months should be excluded from the calculation. Confirm that you have NAs in your chart as below.
+
+```{r, eval=FALSE}
+###Descriptives
+
+RMS_XXX_202X_ind <- ind %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+###Table by population groups
+
+impact2_3 <- RMS_XXX_202X_ind %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Group by pop_groups
+  summarise(                                         # Summarise to compute values
+    var_name = "impact2_3",                          # Name of the variable
+    num_obs_uw = unweighted(n()),                    # Unweighted total count
+    denominator = survey_total(),                    # Weighted total count
+    mean_value = survey_mean(impact2_3, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+##Chart for the indicator above
+
+
+
+
+ggplot(impact2_3, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Impact 2.3",
+    x = "Population Groups",
+    y = "Mean Value with standard errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+#### Table and chart that shows results by age/sex/diversity
+
+
+
+impact2_3_AGD <- RMS_XXX_202X_ind %>%
+  filter(!is.na(HH04) & !is.na(disability) & !is.na(HH07_cat)) %>%                     # Exclude if HH07_cat is NA
+  group_by(HH07_cat, HH04, disability) %>%            # Group by Age, Gender, and Disability
+  summarise(                                       # Summarise to compute values
+    var_name = "impact2_3",                        # Name of the variable
+    num_obs_uw = unweighted(n()),                  # Unweighted total count
+    denominator = survey_total(),                  # Weighted total count
+    mean_value = survey_mean(impact2_3, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+####Chart with the AGD variables 
+
+ggplot(impact2_3_AGD, aes(x = HH04, y = mean_value, fill = disability)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  scale_fill_unhcr_d() +  # UNHCR color palette
+  facet_wrap(~ HH07_cat) +  # Create facets for each age group
+  labs(
+    title = "Impact 2.3 by gender, age and disability status",
+    x = "Gender",
+    y = "Mean Value",
+    fill = "Disability",
+    caption = "Note: The disability module does not include children under 5."  #
+  ) +
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for readability
+  )
+
+
+#### The reasons for not being able to access to health services 
+
+##add labels for not accessing the health services
+
+reasons_mapping <- c(
+  "HACC04_1" = "Health facility too far",
+  "HACC04_2" = "Medicine or health facility too expensive",
+  "HACC04_3" = "No treatment exists/Not necessary",
+  "HACC04_4" = "Don't know where to go",
+  "HACC04_5" = "No time",
+  "HACC04_6" = "Prefer other options",
+  "HACC04_7" = "Health facility does not accept new patients",
+  "HACC04_8" = "Don't trust modern medicine",
+  "HACC04_9" = "Don't trust doctors",
+  "HACC04_10" = "Administrative/documentation issues (certificates, service cards, etc.)",
+  "HACC04_11" = "Long waiting times",
+  "HACC04_12" = "Lack of medical supplies",
+  "HACC04_13" = "Health facility damaged/destroyed"
+)
+
+hacc_percentages <- ind %>%
+  summarise(
+    HACC04_1 = mean(HACC04_1 == 1, na.rm = TRUE) * 100,
+    HACC04_2 = mean(HACC04_2 == 1, na.rm = TRUE) * 100,
+    HACC04_3 = mean(HACC04_3 == 1, na.rm = TRUE) * 100,
+    HACC04_4 = mean(HACC04_4 == 1, na.rm = TRUE) * 100,
+    HACC04_5 = mean(HACC04_5 == 1, na.rm = TRUE) * 100,
+    HACC04_6 = mean(HACC04_6 == 1, na.rm = TRUE) * 100,
+    HACC04_7 = mean(HACC04_7 == 1, na.rm = TRUE) * 100,
+    HACC04_8 = mean(HACC04_8 == 1, na.rm = TRUE) * 100,
+    HACC04_9 = mean(HACC04_9 == 1, na.rm = TRUE) * 100,
+    HACC04_10 = mean(HACC04_10 == 1, na.rm = TRUE) * 100,
+    HACC04_11 = mean(HACC04_11 == 1, na.rm = TRUE) * 100,
+    HACC04_12 = mean(HACC04_12 == 1, na.rm = TRUE) * 100,
+    HACC04_13 = mean(HACC04_13 == 1, na.rm = TRUE) * 100
+  ) %>%
+  pivot_longer(cols = everything(), 
+               names_to = "Reason", 
+               values_to = "Percentage") %>%
+  mutate(Reason = reasons_mapping[Reason])  # Map column names to descriptive labels
+
+
+
+##Chart creation
+
+
+ggplot(hacc_percentages, aes(x = reorder(Reason, Percentage), y = Percentage, fill = Reason)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            position = position_stack(vjust = 0.5), size = 3.5) +  # Add percentage labels on bars
+  coord_flip() +  # Flip the axes for better readability
+  labs(
+    title = "Reasons for Not Accessing Health Services",
+    x = "Reason",
+    y = "Percentage",
+    caption = "Note: Percentages calculated independently for each reason."
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.y = element_text(size = 9),  # Adjust text size for readability
+    legend.position = "none"  # Remove the legend for simplicity
+  )
+
+
+```
+
+#### How to calculate 2.3 Impact indicator if the standard questionnaire was not used?
+
+If your RMS was integrated with with another survey and there were already similar questions, it is possible to calculate the indicator from these questions as a proxy.
+In that case, you will need to adjust the scripts accordingly.
+Here the important thing to keep in mind that recall period for this indicator is *3 months* and denominator and numerator includes only those who needed to seek health care.
+
+
+## 3.2a Core Impact Indicator
+
+**Proportion of children and young people enrolled in primary education**
+
+This indicator measures the number of students enrolled in primary education, regardless of age, expressed as a percentage of the official school-age population corresponding to the respective same level of education.
+This is also referred to as Gross enrollment rate (GER).
+It is linked to SGD indicator 4.1.1 on quality education.
+
+The standard questions for this indicator are taken from UNHCR's [Standardized Education Module](https://www.unhcr.org/60804b214.pdf) which are adapted primarily from the IHSN/EPDC and MICS indicator and questionnaire frameworks.
+
+*Definitions*:
+
+1.  "Enrollment" refers individuals officially registered in a primary/secondary school education programme.
+
+2.  "Primary education" is designed to provide students with fundamental skills in reading, writing and mathematics.
+    Duration typically varies from 4 to 7 years.
+    The most common duration is 6 years.
+    It corresponds to ISCED (International Standard Classification of Education) level 1.
+
+3.  "Primary school age" depends on the education system and it varies from country to country.
+    Children typically enter in primary education between age 5 and 7 and leave at the age of 10 and 12.
+
+| Standard Questions |
+|:------------------:|
+|    EDU01-EDU04     |
+
+**Unit of observation**: Individual 
+
+**Numerator**: Number of students enrolled in primary education (regardless of age)
+
+**Denominator**: Total number of individuals of primary school age
+
+```{r, eval=FALSE}
+
+
+
+ind <- ind %>% 
+  mutate(
+    edu_primary = case_when(
+      EDU01 == "1" & EDU02 == "1" & EDU03 == "2" ~ 1,  
+      EDU01 == "0" | EDU02 == "0" ~ 0,
+      TRUE ~ 0
+    )
+  ) %>%
+  mutate(
+    age_primary = case_when(
+      HH07 >= "6" & HH07 <= "13" ~ 1,  ###ADJUST AGE GROUPS FOR PRIMARY LEVEL ( 6- 13 in this ex)
+      TRUE ~ 0
+    )
+  )
+
+
+
+
+
+
+```
+
+Once you have the indicator, you can run descriptive statistics as below.
+You should check the mean per group as this is calculated by proportion not percentage.
+
+```{r, eval=FALSE}
+
+###Results of the indicator table
+
+RMS_XXX_202X_ind <- ind %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+###You can check official statistics here: https://data.uis.unesco.org/index.aspx?queryid=3847
+
+
+##Table 
+
+impact3_2a <- RMS_XXX_202X_ind %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop_groups is NA
+  group_by(pop_groups) %>%                          # Group by pop_groups
+  summarise(
+    var_name = "impact3_2a",                        # Name of the variable
+    num_obs_uw = survey_total(!is.na(age_primary), na.rm = TRUE),  # Unweighted total count
+    denominator = survey_total(edu_primary, na.rm = TRUE),         # Weighted total count
+    edu_primary_total = survey_total(edu_primary, na.rm = TRUE),   # Total for edu_primary
+    age_primary_total = survey_total(age_primary, na.rm = TRUE)    # Total for age_primary
+  ) %>%
+  mutate(
+    mean_value = round(edu_primary_total / age_primary_total, 4)  # Calculate the mean value
+  )
+
+
+###Table with gender and disability included for the chart
+
+
+
+impact3_2a_AGD <- RMS_XXX_202X_ind %>%
+  filter(!is.na(pop_groups) & !is.na(disability) & !is.na(HH04)) %>%                     # Exclude if pop_groups is NA
+  group_by(pop_groups,disability,HH04) %>%                          # Group by pop_groups
+  summarise(
+    var_name = "impact3_2a",                        # Name of the variable
+    num_obs_uw = survey_total(!is.na(age_primary), na.rm = TRUE),  # Unweighted total count
+    denominator = survey_total(edu_primary, na.rm = TRUE),         # Weighted total count
+    edu_primary_total = survey_total(edu_primary, na.rm = TRUE),   # Total for edu_primary
+    age_primary_total = survey_total(age_primary, na.rm = TRUE)    # Total for age_primary
+  ) %>%
+  mutate(
+    mean_value = round(edu_primary_total / age_primary_total, 4)  # Calculate the mean value
+  )
+
+
+
+###Chart for the above table
+
+
+ggplot(impact3_2a_AGD, aes(x = HH04, y = mean_value, fill = disability)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.7) +
+  geom_text(aes(label = sprintf("%.2f", mean_value)), 
+            position = position_dodge(width = 0.7), vjust = -0.5, size = 3) +  # Add values on bars
+  facet_wrap(~ pop_groups) +  # Create separate plots for each pop_group
+  labs(
+    title = "Enrollment in primary education by Age, Gender, and Population Groups",
+    x = "Gender ",
+    y = "Proportion of Education Level",
+    fill = "Disability Status"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for readability
+  )
+
+
+
+
+```
+
+#### How to calculate 3.2a Impact indicator if the standard questionnaire was not used?
+
+This module aims to calculate a proxy from RMS for the gross enrollment rates for primary school education.
+If you have different questions, you should try to match with existing questions on education enrollment for primary school.
+
+
+## 3.2b Core Impact Indicator
+
+**Proportion of children and young people enrolled in secondary education**
+
+This indicator measures the number of students enrolled in secondary education, regardless of age, expressed as a percentage of the official school-age population corresponding to the respective same level of education.
+This is also referred to as Gross enrollment rate (GER).
+It is linked to SGD indicator 4.1.1 on quality education.
+
+The standard questions for this indicator are taken from UNHCR's [Standardized Education Module](https://www.unhcr.org/60804b214.pdf) which are adapted primarily from the IHSN/EPDC and MICS indicator and questionnaire frameworks.
+
+Definitions:
+
+1.  "Enrollment" refers individuals officially registered in a primary/secondary school education programme.
+
+2.  "Secondary education" provides learning and educational activities building on primary education and preparing for both first labour market entry as well as further study.
+    The common duration is 6 years and is often divided between lower and upper secondary education (corresponding respectively to ISCED 2 and 3).
+
+3.  "Secondary school age" depends on the education system and differ from country to country.
+    Children typically enter secondary education between age 11 and 13 and leave between age 17-19.
+
+4.  Whenever possible, operations are encouraged also to disaggregate data between lower and upper secondary
+
+| Standard Questions |
+|:------------------:|
+|    EDU01-EDU04     |
+
+**Unit of observation**: Individual 
+
+**Numerator**: Number of students enrolled in secondary education (regardless of age)
+
+**Denominator**: Total number of individuals of secondary school age
+
+```{r, eval=FALSE}
+
+###This indicator comes from the individual dataset
+
+###Include if they are attending secondary or secondary -technical and vocational
+
+ind <- ind %>%
+  mutate(
+    edu_secondary = case_when(
+      EDU01 == "1" & EDU02 == "1" & (EDU03 == "3" | EDU03 == "4") ~ 1,
+      EDU01 == "0" | EDU02 == "0" ~ 0,
+      TRUE ~ 0
+    )
+  ) %>%
+  mutate(
+    age_secondary = case_when(
+      HH07 >= "11" & HH07 <= "18" ~ 1,  # ADJUST THE SCHOOL AGE FOR SECONDARY ( 11 to 18 in this ex)
+      TRUE ~ NA_real_  # NA_real_ for missing numeric values
+    )
+  )
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+You should check the mean per group as this is calculated by proportion not percentage.
+
+```{r, eval=FALSE}
+###Results of the indicator table
+
+RMS_XXX_202X_ind <- ind %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+impact3_2b <- RMS_XXX_202X_ind %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop_groups is NA
+  group_by(pop_groups) %>%                          # Group by pop_groups
+  summarise(
+    var_name = "impact3_2b",                        # Name of the variable 
+    num_obs_uw = survey_total(!is.na(age_secondary), na.rm = TRUE),  # Unweighted total count for secondary age
+    denominator = survey_total(edu_secondary, na.rm = TRUE),         # Weighted total count for secondary education
+    edu_secondary_total = survey_total(edu_secondary, na.rm = TRUE), # Total for secondary education
+    age_secondary_total = survey_total(age_secondary, na.rm = TRUE)  # Total for secondary age
+  ) %>%
+  mutate(
+    mean_value = round(edu_secondary_total / age_secondary_total, 4)  # Calculate the mean value
+  )
+
+
+###Table with gender and disability included for the chart
+
+
+impact3_2b_AGD <- RMS_XXX_202X_ind %>%
+  filter(!is.na(pop_groups) & !is.na(disability) & !is.na(HH04)) %>%  # Exclude if pop_groups, disability, or HH04 is NA
+  group_by(pop_groups, disability, HH04) %>%                          # Group by pop_groups, disability, and HH04
+  summarise(
+    var_name = "impact3_2b",                                          # Name of the variable (changed to impact3_2b)
+    num_obs_uw = survey_total(!is.na(age_secondary), na.rm = TRUE),   # Unweighted total count for secondary age
+    denominator = survey_total(edu_secondary, na.rm = TRUE),          # Weighted total count for secondary education
+    edu_secondary_total = survey_total(edu_secondary, na.rm = TRUE),  # Total for secondary education
+    age_secondary_total = survey_total(age_secondary, na.rm = TRUE)   # Total for secondary age
+  ) %>%
+  mutate(
+    mean_value = round(edu_secondary_total / age_secondary_total, 4)  # Calculate the mean value
+  )
+
+
+
+###Chart for the above table
+
+ggplot(impact3_2b_AGD, aes(x = HH04, y = mean_value, fill = disability)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.7) +
+  geom_text(aes(label = sprintf("%.2f", mean_value)), 
+            position = position_dodge(width = 0.7), vjust = -0.5, size = 3) +  # Add values on bars
+  facet_wrap(~ pop_groups) +  # Create separate plots for each pop_group
+  labs(
+    title = "Enrollment in Secondary Education by Age, Gender, and Population Groups",
+    x = "Gender",
+    y = "Proportion of Education Level",
+    fill = "Disability Status"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for readability
+  )
+
+
+
+```
+
+#### How to calculate 3.2b Impact indicator if the standard questionnaire was not used?
+
+This module aims to calculate a proxy from RMS for the gross enrollment rates for secondary school education.
+If you have different questions, you should try to match with existing questions on education enrollment for secondary school.
+
+
+
+## 3.3 Core Impact Indicator
+
+**Proportion of people that feel safe walking alone in their neighbourhood after dark**
+
+This indicator measures the proportion of people who self-report feeling safe while walking alone in their neighborhood after dark.
+This indicator only pertains to self-reported feeling of ‘safety’ and not ‘security’ since security is associated with additional external factors.
+It is linked to SDG indicator [16.1.4](https://unstats.un.org/sdgs/metadata/files/Metadata-16-01-04.pdf).
+
+
+
+| Standard Questions |
+|:------------------:|
+|       SAF01        |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals who self-report feeling safe walking alone in their neighborhood after dark
+
+**Denominator**: Total number of individuals
+
+The standard survey question module for this indicator is taken from SGD indicator owner UNODC. To calculate the indicator value, the standard survey methodology considers in the numerator only individuals who respond they feel “very safe” and “fairly safe”.
+
+```{r, eval=FALSE}
+
+ ##This indicator comes from main dataset based on the respondent randomly selected for individual level
+
+
+main <- main %>%
+  mutate(
+    impact3_3 = case_when(
+      SAF01 == "1" | SAF01 == "2" ~ 1,  # Assign 1 for Yes (feels safe)
+      SAF01 == "3" | SAF01 == "4" ~ 0,  # Assign 0 for No (does not feel safe)
+      SAF01 == "98" | SAF01 == "99" ~ NA_real_  # Handle missing/unknown values with NA_real_
+    )
+  ) %>%
+  mutate(
+    impact3_3 = labelled(
+      impact3_3,
+      labels = c(
+        "Yes" = 1,  # Label for Yes (1)
+        "No" = 0    # Label for No (0)
+      ),
+      label = "Proportion of people that feel safe walking alone in their neighbourhood after dark"  # Assign the variable label
+    )
+  )
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+###Table standard 
+
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+impact3_3 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Group by pop_groups
+  summarise(                                         # Summarise to compute values
+    var_name = "impact3_3",                          # Name of the variable
+    num_obs_uw = unweighted(n()),                    # Unweighted total count
+    denominator = survey_total(),                    # Weighted total count
+    mean_value = survey_mean(impact3_3, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+##Chart for the indicator above
+
+
+
+ggplot(impact3_3, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Impact 3.3",
+    x = "Population Groups",
+    y = "Mean Value with standard errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+#### Table and chart that shows results by age/sex/diversity
+
+impact3_3_AGD <- RMS_XXX_202X_main %>%
+  filter(!is.na(HH04) & !is.na(disability) & !is.na(HH07_cat) & HH07 > 18) %>%  # Exclude HH07_cat categories 1, 2, and 5
+  group_by(HH07_cat, HH04, disability) %>%
+  summarise(
+    var_name = "impact3_3",                                      # Name of the variable
+    num_obs_uw = survey_total(!is.na(impact3_3), vartype = NULL),  # Unweighted total count
+    denominator = survey_total(),                                # Weighted total count
+    mean_value = survey_mean(impact3_3, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with CI and SE
+  )
+
+
+```
+
+#### How to calculate 3.3 Impact indicator if the standard questionnaire was not used?
+
+This indicator can be calculated if only a similar question is available on self-perception of safety on walking alone after dark.
+
+
+## 1.2 Core Outcome Indicator
+
+**Proportion of children under 5 years of age whose births have been registered with a civil authority**
+
+This indicator measures the proportion of children under 5 years old whose births have been registered with a civil authority and civil documentation has been issued.
+This is directly linked to SGD indicator [16.9.1](https://unstats.un.org/sdgs/metadata/files/Metadata-16-09-01.pdf).
+
+The standard module for this indicator is taken from MICS and adjusted to UNHCR context.
+
+***Definitions***
+
+•**Birth registration** refers to the registration of new births by civil authorities and completion of the process through the issuance of a birth certificate.
+This also includes documents issued by UNHCR or other relevant organizations when **given the authority by the State and these documents are recognized by national authorities**.
+
+***Clarifications***
+
+•Birth notifications or other hospital records and records from midwives or traditional birth attendants, **issued solely by UNHCR or its partners shall not be considered** as birth certificates although they are important sources for establishing the total number of births.
+Operations are encouraged to track both the number of birth notifications and birth registrations but for the purpose of this indicator should report the number of births registered.
+
+• The standard indicator used in DHS, MICS and RMS to report on birth registration refers to the percentage of children under age 5 (0-59 months) with a birth certificate, regardless of whether or not it was seen by the interviewer, or whose birth was reported as registered with civil authorities at the time of survey.
+
+| Standard Questions |
+|:------------------:|
+|   REG03 - REG04    |
+
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of children under 5 years old who are registered with civil authorities
+
+**Denominator**: Total number of children under 5 years old
+
+The standard survey methodology (RMS as well as DHS, MICS) considers the percentage of children under age 5 (0-59 months) with a birth certificate, regardless of whether or not it was seen by the interviewer, or whose birth was reported as registered with civil authorities at the time of survey. Surveys conducted by UNHCR should use this standard methodology to enable comparison with national statistics on birth registration rates.
+
+
+
+```{r, eval=FALSE}
+
+
+# ind$REG03 - birth certificate
+# ind$REG04 - birth has been registered
+
+##Calculate children who has a birth certificate
+
+ind <- ind %>%
+  mutate(birthCertificate = case_when(
+    REG03 == "0" | REG03 == "98" ~ 0,
+    REG03 == "1" ~ 1,
+    TRUE ~ NA_real_  # Handle any missing or unknown values
+  )) %>%
+  mutate(birthCertificate = labelled(
+    birthCertificate,
+    labels = c(
+      'Yes' = 1,
+      'No' = 0
+    ),
+    label = "Children under 5 with a birth certificate"
+  ))
+
+
+ind <- ind %>%
+  mutate(birthRegistered = case_when(
+    REG04 == "0" | REG04 == "98" ~ 0,
+    REG04 == "1" ~ 1,
+    REG04 == "99" ~ NA_real_,  # Handle unknown/missing values
+    TRUE ~ NA_real_  # Catch-all for any unexpected values
+  )) %>%
+  mutate(birthRegistered = labelled(
+    birthRegistered,
+    labels = c(
+      'Yes' = 1,
+      'No' = 0
+    ),
+    label = "Children under 5 birth registered with civil authorities"
+  ))
+
+# Mutate outcome1_2 variable 
+ind <- ind %>%
+  mutate(outcome1_2 = case_when(
+    (birthRegistered == 1 | birthCertificate == 1) & HH07 < 5 ~ 1,  # Child has been registered or has birth certificate
+    (birthRegistered == 0 & birthCertificate == 0) & HH07 < 5 ~ 0,  # Child not registered and has no birth certificate
+    TRUE ~ NA_real_  # Handle cases where data is missing or unknown
+  )) %>%
+  mutate(outcome1_2 = labelled(
+    outcome1_2,
+    labels = c(
+      'Yes' = 1,
+      'No' = 0
+    ),
+    label = "Proportion of children under 5 years of age whose births have been registered with a civil authority"
+  ))
+
+
+
+```
+
+Once you have the indicator variable, you should run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+
+##Table for srvyr
+
+RMS_XXX_202X_ind <- ind %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+###Table 
+
+
+outcome1_2 <- RMS_XXX_202X_ind %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Group by pop_groups
+  summarise(                                         # Summarise to compute values
+    var_name = "outcome1_2",                          # Name of the variable
+    num_obs_uw = unweighted(n()),                    # Unweighted total count
+    denominator = survey_total(),                    # Weighted total count
+    mean_value = survey_mean(outcome1_2, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+##Table with disability and gender
+
+
+outcome1_2_AGD <- RMS_XXX_202X_ind %>%
+  filter(!is.na(HH04) & !is.na(disability) & !is.na(pop_groups) & HH07 < 5 ) %>%  # Exclude HH07_cat categories 1, 2, and 5
+  group_by(HH07_cat, HH04, pop_groups) %>%
+  summarise(
+    var_name = "outcome1_2",                                      # Name of the variable
+    num_obs_uw = survey_total(!is.na(outcome1_2), vartype = NULL),  # Unweighted total count
+    denominator = survey_total(),                                # Weighted total count
+    mean_value = survey_mean(outcome1_2, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with CI and SE
+  )
+
+
+##Chart with pop groups
+
+gender_colors <- c("Male" = "#8395B9", "Female" = "#E0E9FE")
+
+
+ggplot(outcome1_2_AGD, aes(x = HH04, y = mean_value, fill = HH04)) +  # Fill mapped to HH04 for gender
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.7) +
+  geom_text(aes(label = sprintf("%.2f", mean_value)), 
+            position = position_dodge(width = 0.7), vjust = -0.5, size = 3) +  # Add values on bars
+  facet_wrap(~ pop_groups) +  # Create separate plots for each population group
+  labs(
+    title = "Outcome 1.2 by Population Groups and Gender",
+    x = "Gender",
+    y = "Proportion of children that registered",
+    caption = "Note: Only children under 5"
+  ) +
+  scale_fill_manual(values = gender_colors) +  # Apply custom colors for male and female
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for readability
+  )
+
+
+
+```
+
+#### How to calculate 1.2 Outcome indicator if the standard questionnaire was not used?
+
+This indicator can be calculated if only a similar question is available on birth registration and the availability of birth certificate for children under 5.
+
+
+## 1.3 Core Outcome Indicator
+
+**Proportion of people with legally recognized identity documents or credentials**
+
+This indicator measures the proportion of persons of concern who possess legally recognized and valid identity documents or credentials.
+
+Establishing one's identity and possessing legally recognized and valid identity documents or credentials ensures the legal protection of persons of concern, protection from refoulement, registration of life events to prevent statelessness, as well as access to services.
+
+***Definitions***
+
+• Identity document or credential is any document or credential which may be used as proof of identity, which may also include reference to the individuals' legal status and associated rights vis-à-vis the host State and/or UNHCR.
+
+|          Standard Questions           |
+|:-------------------------------------:|
+| REG01 - REG02 - REG03 / REG05 - REG06 |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals with valid identity documents or credentials
+
+**Denominator**: Total number of individuals
+
+```{r, eval=FALSE}
+
+##This indicator comes from the individual dataset
+
+
+##This indicator comes from the individual dataset
+
+
+###Calculate valid identity documents for under 5 with REG05 and REG06 variables
+
+
+#ind$REG05a - passport
+#ind$REG05b - civil/government issued ID
+#ind$REG05c - residency permit
+#ind$REG05d - statelessness documentation
+#ind$REG05e - household card of address/family book
+#ind$REG05f - social security card
+#ind$REG06 - any other document establishes identity
+#add birth certificate as additional document from REG03
+
+
+
+#ind$REG01a # passport
+#ind$REG01b # birth certificate
+#ind$REG01c # civil/ government issued ID
+#ind$REG01d # residency permit
+#ind$REG01e # statelessness documentation
+#ind$REG01f # household card of address/family book
+#ind$REG01g # social security card
+#ind$REG02 # any other document establishes identity
+
+#Make sure to delete REG05e below from the script if you don't have any stateless 
+
+ind <- ind %>%
+  mutate(document_under5 = case_when(
+    REG05a == "1" | REG05b == "1" | REG05c == "1" | REG05d == "1" | REG05e == "1" | REG05f == "1" | REG06 == "1" | REG03 == "1" ~ 1,
+    REG05a != "1" & REG05b != "1" & REG05c != "1" & REG05d != "1" & REG05e != "1" & REG05f != "1" & REG06 != "1" & REG03 != "1" ~ 0,
+    TRUE ~ NA_real_
+  ))
+
+# Mutate document_above5 using character values
+ind <- ind %>%
+  mutate(document_above5 = case_when(
+    REG01a == "1" | REG01b == "1" | REG01c == "1" | REG01d == "1" | REG01e == "1" | REG01f == "1" | REG01g == "1" | REG02 == "1" ~ 1,
+    REG01a != "1" & REG01b != "1" & REG01c != "1" & REG01d != "1" & REG01e != "1" & REG01f != "1" & REG01g != "1" & REG02 != "1" ~ 0,
+    TRUE ~ NA_real_
+  ))
+
+# Combine both age groups
+ind <- ind %>%
+  mutate(outcome1_3 = case_when(
+    (document_above5 == 1 | document_under5 == 1) ~ 1,  
+    (document_above5 == 0 | document_under5 == 0) ~ 0
+  )) %>%
+  mutate(outcome1_3 = labelled(outcome1_3,
+                               labels = c(
+                                 'Yes' = 1,
+                                 'No' = 0
+                               ),
+                               label = "Proportion of people with legally recognized identity documents or credentials"))
+
+
+
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+
+
+RMS_XXX_202X_ind <- ind %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+###Table by population groups
+
+outcome1_3 <- RMS_XXX_202X_ind %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Group by pop_groups
+  summarise(                                         # Summarise to compute values
+    var_name = "outcome1_3",                          # Name of the variable
+    num_obs_uw = unweighted(n()),                    # Unweighted total count
+    denominator = survey_total(),                    # Weighted total count
+    mean_value = survey_mean(outcome1_3, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+##Chart for the indicator above
+
+
+
+
+ggplot(outcome1_3, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 1.3",
+    x = "Population Groups",
+    y = "Mean Value with standard errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+#### Table and chart that shows results by age/sex/diversity
+
+
+
+outcome1_3_AGD <- RMS_XXX_202X_ind %>%
+  filter(!is.na(HH04) & !is.na(disability) & !is.na(HH07_cat)) %>%                     # Exclude if HH07_cat is NA
+  group_by(HH07_cat, HH04, disability) %>%            # Group by Age, Gender, and Disability
+  summarise(                                       # Summarise to compute values
+    var_name = "outcome1_3",                        # Name of the variable
+    num_obs_uw = unweighted(n()),                  # Unweighted total count
+    denominator = survey_total(),                  # Weighted total count
+    mean_value = survey_mean(outcome1_3, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+####Chart with the AGD variables 
+
+ggplot(outcome1_3_AGD, aes(x = HH04, y = mean_value, fill = disability)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.7) +  # Grouped bar chart
+  geom_text(aes(label = sprintf("%.2f", mean_value)), 
+            position = position_dodge(width = 0.7), vjust = -0.5, size = 3) +  # Add values on top of bars
+  scale_fill_unhcr_d() +  # Apply UNHCR color palette
+  facet_wrap(~ HH07_cat) +  # Create facets for each age group
+  labs(
+    title = "Outcome 1.3 by Gender, Age, and Disability Status",
+    x = "Gender",
+    y = "Mean Value",
+    fill = "Disability",
+    caption = "Note: The disability module does not include children under 5."
+  ) +
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels for readability
+    axis.text.y = element_text(size = 10)  # Adjust y-axis label size for readability
+  )
+
+
+###define labels 
+
+identity_documents <- c(
+  "REG01a" = "Passport",
+  "REG01b" = "Birth certificate",
+  "REG01c" = "Civil/ government issued ID",
+  "REG01d" = "Residency permit",
+  "REG01e" = "Statelessness documentation",
+  "REG01f" = "Household card of address/family book",
+  "REG01g" = "Social security card",
+  "REG02" = "Any other document"
+)
+
+# Calculate the percentage of '1's for each identity document
+
+identity_document_percentages <- RMS_XXX_202X_ind %>%
+  summarise(across(c(REG01a, REG01b, REG01c, REG01d, REG01e, REG01f, REG01g, REG02),
+                   ~ mean(. == "1", na.rm = TRUE) * 100)) %>%
+  pivot_longer(cols = everything(), 
+               names_to = "Document", 
+               values_to = "Percentage") %>%
+  mutate(Document = identity_documents[Document])  # Map column names to descriptive labels
+
+
+# Create the bar chart
+ggplot(identity_document_percentages, aes(x = reorder(Document, Percentage), y = Percentage, fill = Document)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            position = position_stack(vjust = 0.5), size = 3.5) +  # Add percentage labels on bars
+  coord_flip() +  # Flip the axes for better readability
+  labs(
+    title = "Percentage of Individuals Holding Identity Documents",
+    x = "Identity Document",
+    y = "Percentage",
+    caption = "Note: Percentages are calculated independently for each document for individuals 5 and above."
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.y = element_text(size = 9),  # Adjust text size for readability
+    legend.position = "none"  # Remove the legend for simplicity
+  )
+
+
+```
+
+#### How to calculate 1.3 Outcome indicator if the standard questionnaire was not used?
+
+This indicator can be calculated if there is a question on the availability of legally recognized identity documents or credentials.
+
+
+
+## 4.1 Core Outcome Indicator
+
+**Proportion of people who know where to access available GBV service**
+
+The indicator is defined as the proportion of persons of concern who know where to access at least one of the four available gender-based violence services in the aftermath of a GBV incident.
+
+This is linked to the Inter-Agency Minimum Standards for Gender-Based Violence in Emergencies Programming.
+
+The response options will appear as below when the standardized module is used.
+
+*Definitions:*
+
+1.  **GBV01a (**Health): "Medical treatment and health care to address the immediate and long-term physical and mental health effects of GBV. This can include initial examination and treatment, follow-up medical care, mental health care, and health-related legal services, such as preparation of documentation and provision of evidence during judicial and related processes."
+
+2.  **GBV01b** (Psycho-social/ case management): "Psychosocial care and support to assist with healing and recovery from emotional, psychological and social effects. This includes crisis care as well as longer-term emotional and practical support for the survivor and her/his family, information and advocacy, case management, and educating family members so that they can support the survivor's healing and recovery.
+
+3.  **GBV01c** (Safety/security): "Options for safety and protection for survivors and their families who are at risk of further violence and who wish to be protected. This can include safe shelters, police or community security, relocation, or in the case of children, alternative care arrangements".
+
+4.  **GBV01d** (Legal assistance): "Legal actors will clearly and honestly inform the victim/survivor of the procedures, limitations, pros, and cons of all existing legal options".
+
+| Standard Questions |
+|:------------------:|
+|       GBV01        |
+
+**Unit of measurement**: Individual
+
+**Numerator**: Number of individuals who indicate knowing where to access available GBV services
+
+**Denominator**: Total number of individuals
+
+To calculate the indicator value, the standard RMS methodology considers in the numerator only individuals who self-report knowledge of at least one of the two lifesaving GBV services (Health or Psychosocial/Case Management services).
+
+```{r, eval=FALSE}
+
+
+##indicator calculation
+
+main <- main %>%
+  mutate(outcome4_1 = case_when(
+    GBV01a == "1" | GBV01b == "1" ~ 1,  # If GBV01a or GBV01b is "1", set to 1 (numeric)
+    across(c(GBV01a, GBV01b, GBV01c, GBV01d), ~ . == "98") %>% rowSums() == 4 ~ NA_real_,  # If all selected columns are "98", set to NA_real_
+    TRUE ~ 0  # For all other cases, set to 0 (numeric)
+  )) %>%
+  mutate(outcome4_1 = labelled(outcome4_1,
+                               labels = c(
+                                 'Yes' = 1,
+                                 'No' = 0
+                               ),
+                               label = "Proportion of people who know where to access available GBV service"
+  ))
+
+  
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+######Table standard 
+
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+###Table 
+
+outcome4_1 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Group by pop_groups
+  summarise(                                         # Summarise to compute values
+    var_name = "outcome4_1",                          # Name of the variable
+    num_obs_uw = unweighted(n()),                    # Unweighted total count
+    denominator = survey_total(!is.na(outcome4_1), vartype = NULL),                    # Weighted total count
+    mean_value = survey_mean(outcome4_1, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+
+
+##Chart for the indicator above
+
+
+
+ggplot(outcome4_1, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 4.1",
+    x = "Population Groups",
+    y = "Mean value with standard errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+#### Table and chart that shows results by age/sex/diversity
+
+outcome4_1_AGD <- RMS_XXX_202X_main %>%
+  filter(!is.na(HH04) & !is.na(disability) & !is.na(HH07_cat) & HH07 > 18) %>%  # only 18 and above 
+  group_by(HH07_cat, HH04, disability) %>%
+  summarise(
+    var_name = "outcome4_1",                                      # Name of the variable
+    num_obs_uw = survey_total(!is.na(outcome4_1), vartype = NULL),  # Unweighted total count
+    denominator = survey_total(),                                # Weighted total count
+    mean_value = survey_mean(outcome4_1, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with CI and SE
+  )
+
+
+
+####Simple bar chart of GBV01
+
+
+
+###define labels 
+
+gbv_services <- c(
+  "GBV01a" = "Health services",
+  "GBV01b" = "Psycho-social services",
+  "GBV01c" = "safety and security services",
+  "GBV01d" = "Legal assistance"
+)
+
+# Calculate the percentage of '1's for each identity document
+
+
+gbv01_percentages <- RMS_XXX_202X_main %>%
+  summarise(across(c(GBV01a, GBV01b, GBV01c, GBV01d),
+                   ~ mean(. == "1", na.rm = TRUE) * 100)) %>%
+  pivot_longer(cols = everything(), 
+               names_to = "Services", 
+               values_to = "Percentage") %>%
+  mutate(Services = gbv_services[Services])  # Map column names to descriptive labels
+
+# Create the bar chart
+
+ggplot(gbv01_percentages, aes(x = reorder(Services, Percentage), y = Percentage, fill = Services)) +
+  geom_bar(stat = "identity", width = 0.7) +  # Use "identity" for stat
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            position = position_stack(vjust = 0.5), size = 3.5) +  # Add percentage labels inside bars
+  coord_flip() +  # Flip the axes for better readability
+  labs(
+    title = "Knowledge on where to access available GBV services",
+    x = "Gender-Based Violence Services",
+    y = "Percentage",
+    caption = "Note: Percentages are calculated independently for each service for individuals 18 and above."
+  ) +
+  scale_fill_unhcr_d() +  # Apply UNHCR color palette
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.y = element_text(size = 9),  # Adjust y-axis text size for readability
+    legend.position = "none"  # Remove legend for simplicity
+  )
+
+
+
+##Table with education level for randomly selected adult
+
+
+outcome4_1_EDU <- RMS_XXX_202X_main %>%
+  filter(!is.na(EDU01_random) ) %>%  # Exclude EDU01_random
+  group_by(EDU01_random) %>%
+  summarise(
+    var_name = "outcome4_1",                                      # Name of the variable
+    num_obs_uw = survey_total(),  # Unweighted total count
+    denominator = survey_total(),                                # Weighted total count
+    mean_value = survey_mean(outcome4_1, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with CI and SE
+  )
+
+
+```
+
+#### How to calculate 4.1 outcome indicator if the standard questionnaire was not used?
+
+This indicator can be calculated if there is a question on the individuals who self-report knowledge of at least one of the two lifesaving GBV services (Health or Psychosocial/Case Management services).
+
+
+## 4.2 Core Outcome Indicator
+
+**Proportion of people who do not accept violence against women**
+
+This indicator measures the proportion of persons of concern who disagree that a husband is justified in hitting or beating his wife for a list of specific reasons.
+This serves as a proxy indicator for those who do not accept violence against women.
+
+This module is taken from [Domestic Violence Module](https://dhsprogram.com/pubs/pdf/DHSQMP/DHS6_Module_Domestic_Violence_6Aug2014_DHSQMP.pdf) from DHS and similar module used by MICS.
+Due to its sensitivity, this module is only recommended for face-to-face surveys.
+
+*Data Collection Safeguards*
+
+Enumerators (and data collection teams) must be trained on GBV safe disclosures and referrals prior to undertaking household surveys (or at least get a briefing on the GBV referral pathway in their area).
+To ensure quality feedback and limit risks of harm, it is advisable to administer the survey to members of the household separately in confidential spaces (consider using interview rooms at community centres in settings where layout of communities' homes do not allow for confidential discussions).
+It is also recommended to ensure same-sex enumerators to minimize risks of SEA particularly for female respondents.
+
+| Standard Questions |
+|:------------------:|
+|       VAW01        |
+
+**Unit of measurement**: Individual
+
+**Numerator**: Number of individuals aged 18 and above who do not accept violence against women
+
+**Denominator**: Total number of individuals above 18
+
+To calculate the indicator value, the standard RMS methodology considers in the numerator only individuals who respond ‘no’ to all of the five standard questions, i.e., believe that a husband is not justified in hitting or beating his wife for any of the five listed reasons (1) Going out without telling him; 2) Neglecting the children; 3) Arguing with him; 4) Refusing to have sexual intercourse with him; 5) Burning food).
+
+```{r, eval=FALSE}
+
+#This indicator comes from main dataset based on the respondent randomly selected for individual level
+
+#If randomly selected adult who believes that a  husband is justified in beating his wife in various circumstances
+
+##If yes selected for any of the circumstances
+###Prefer not to respond will be put into missing
+
+main <- main %>%
+  mutate(
+    outcome4_2 = case_when(
+      VAW01a == "1" | VAW01b == "1" | VAW01c == "1" | VAW01d == "1" | VAW01e == "1" ~ 0,  # Any "1" results in 0
+      VAW01a == "0" & VAW01b == "0" & VAW01c == "0" & VAW01d == "0" & VAW01e == "0" ~ 1,  # All "0"s result in 1
+      TRUE ~ NA_real_  # Missing or other cases result in NA
+    )
+  ) %>%
+  mutate(
+    outcome4_2 = labelled(
+      outcome4_2,
+      labels = c(
+        'Yes' = 1,  # Numeric label for "Yes"
+        'No' = 0    # Numeric label for "No"
+      ),
+      label = "Proportion of people who do not accept violence against women"
+    )
+  )
+
+
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+
+######Table standard 
+
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+##Table 
+
+outcome4_2 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Group by pop_groups
+  summarise(                                         # Summarise to compute values
+    var_name = "outcome4_2",                          # Name of the variable
+    num_obs_uw = unweighted(n()),                    # Unweighted total count
+    denominator = survey_total(),                    # Weighted total count
+    mean_value = survey_mean(outcome4_2, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+##Chart for the indicator above
+
+
+
+ggplot(outcome4_2, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 4.2",
+    x = "Population Groups",
+    y = "Mean value with standard errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+#### Table and chart that shows results by age/sex/diversity
+
+outcome4_2_AGD <- RMS_XXX_202X_main %>%
+  filter(!is.na(HH04) & !is.na(disability) & !is.na(HH07_cat) & HH07 > 18) %>%  # only 18 and above 
+  group_by(HH07_cat, HH04, disability) %>%
+  summarise(
+    var_name = "outcome4_2",                                      # Name of the variable
+    num_obs_uw = survey_total(!is.na(outcome4_2), vartype = NULL),  # Unweighted total count
+    denominator = survey_total(),                                # Weighted total count
+    mean_value = survey_mean(outcome4_2, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with CI and SE
+  )
+
+
+
+
+
+## Gender-based Violence
+
+
+vaw_options <- c(
+  VAW01a = "If she goes out without telling him",
+  VAW01b = "If she neglects the children",
+  VAW01c = "If she argues with him",
+  VAW01d = "If she refuses to have sex with him",
+  VAW01e = "If she burns the food"
+)
+
+# Summarize the percentages for each question
+vaw01_percentages <- main %>%
+  summarise(across(c(VAW01a, VAW01b, VAW01c, VAW01d, VAW01e),
+                   ~ mean(. == "1", na.rm = TRUE) * 100)) %>%
+  pivot_longer(cols = everything(), 
+               names_to = "Question", 
+               values_to = "Percentage") %>%
+  mutate(Question = vaw_options[Question])  # Map column names to descriptive labels
+
+
+###Chart
+
+ggplot(vaw01_percentages, aes(x = reorder(Question, Percentage), y = Percentage, fill = Question)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            position = position_stack(vjust = 0.5), size = 3.5) +  # Add percentage labels on bars
+  coord_flip() +  # Flip the axes for better readability
+  labs(
+    title = "Justification for Violence Against Women",
+    x = "Justification",
+    y = "Percentage",
+    caption = "Note: Percentages represent the proportion of respondents who agree with the justification."
+  ) +
+  scale_fill_unhcr_d() +  # Apply UNHCR color palette
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.y = element_text(size = 9),  # Adjust text size for readability
+    legend.position = "none"  # Remove the legend for simplicity
+  )
+
+
+```
+
+#### How to calculate 4.2 Outcome indicator if the standard questionnaire was not used?
+
+The calculation of this indicator is tied to a specific module. For optimal accuracy and reliability, it is strongly recommended to refrain from calculating this indicator through alternative sources and/or methods.
+
+## 5.2 Core Outcome Indicator
+
+**Proportion of children who participate in community-based child protection programmes**
+
+The indicator is defined as the the proportion of children who participate in community-based child protection programmes.
+The module for this question comes from UNHCR Core indicator metadata.
+
+Children' participation in community-based recreational and child protection activities is a key mechanism for the protection of children by providing children with a protected environment in which they can participate in organized activities to play, socialize, learn, and express themselves, promoting their psycho-social well-being and reducing the risk of abuse, violence or exploitation.
+
+| Standard Questions |
+|:------------------:|
+|   COMM01-COMM04    |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of children 4-17 years who participate in community-based child protection programmes
+
+**Denominator**: Total number of children between 4-17 years
+
+To calculate the indicator value, the standard RMS methodology considers in the numerator only children between 4-17 years who have participated at least once in the last month in sports, arts, cultural activities, or other after-school programmes for children outside the home that were in a physically safe area with adults supervising these activities.
+
+```{r, eval=FALSE}
+
+#Turn into numeric variables
+
+## Child Protection
+
+
+ind$COMM01 <- labelled_chr2dbl(ind$COMM01)
+ind$COMM02 <- labelled_chr2dbl(ind$COMM02)
+ind$COMM03 <- labelled_chr2dbl(ind$COMM03)
+ind$COMM04 <- labelled_chr2dbl(ind$COMM04)
+
+
+###This indicator comes from the individual level dataset
+
+
+#Children who participate in community-based programmes at least once 
+##under adult supervision in a physically safe area
+
+ind <- ind %>%
+  mutate(outcome5_2 = case_when(
+    (COMM01 == "1" & (COMM02 >= "1" & COMM02 != "98") & COMM03 == "1" & COMM04 == "1") ~ 1,  # All conditions are character comparisons
+    (COMM01 == "0" | 
+       (COMM02 == "0" | COMM02 == "98") | 
+       (COMM03 == "0" | COMM03 == "98") |
+       (COMM04 == "0" | COMM04 == "98")) ~ 0,  # Comparison for "0" and "98" as characters
+    TRUE ~ NA_real_  # Catch-all for any missing data
+  )) %>%
+  mutate(outcome5_2 = labelled(outcome5_2,
+                               labels = c(
+                                 'Yes' = 1,  # Label for "Yes"
+                                 'No' = 0    # Label for "No"
+                               ),
+                               label = "Proportion of children who participate in community-based child protection programmes"
+  ))
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+
+###Table 
+
+
+RMS_XXX_202X_ind <- ind %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+##Table 
+
+outcome5_2 <- RMS_XXX_202X_ind %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Group by pop_groups
+  summarise(                                         # Summarise to compute values
+    var_name = "outcome5_2",                          # Name of the variable
+    num_obs_uw = unweighted(n()),                    # Unweighted total count
+    denominator = survey_total(),                    # Weighted total count
+    mean_value = survey_mean(outcome5_2, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+##Table with disability and gender
+
+
+outcome5_2_AGD <- RMS_XXX_202X_ind %>%
+  filter(!is.na(HH04) & !is.na(disability) & !is.na(pop_groups)) %>%  # Missing pipe added here
+  group_by(HH04, pop_groups, disability) %>%
+  summarise(
+    var_name = "outcome5_2",                                      # Name of the variable
+    num_obs_uw = survey_total(!is.na(outcome5_2), vartype = NULL),  # Unweighted total count
+    denominator = survey_total(),                                  # Weighted total count
+    mean_value = survey_mean(outcome5_2, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with CI and SE
+  )
+
+
+
+##Chart with pop groups
+
+gender_colors <- c("Male" = "#8395B9", "Female" = "#E0E9FE")
+
+
+ggplot(outcome5_2_AGD, aes(x = HH04, y = mean_value, fill = HH04)) +  # Fill mapped to HH04 for gender
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.7) +
+  facet_wrap(~ pop_groups) +  # Create separate plots for each population group
+  labs(
+    title = "Outcome 5.2 by Population Groups and Gender",
+    x = "Gender",
+    y = "Proportion of Children",
+    caption = "Note: Only children between 5 to 17"
+  ) +
+  scale_fill_manual(values = gender_colors) +  # Apply custom colors for male and female
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for readability
+  )
+
+
+```
+
+#### How to calculate 5.2 Outcome indicator if the standard questionnaire was not used?
+
+This indicator is calculated through a module that asks if the children aged between 4 to 17 participated in community based child protection programmes in the last 30 days.
+If there is a similar module it would be important to check if the recall period is similar which is *30 days* for the standard module.
+Physical presence and adult supervision should be included in the indicator calculation if possible.
+
+## 8.2 Core Outcome Indicator
+
+**Proportion of people with primary reliance on clean (cooking) fuels and technology**
+
+This indicator measures the proportion of population who use clean fuel and technology as primary source of cooking.
+Any type of cooking fuel and technology meeting the WHO set standards on indoor air emissions, as their main cooking solution.
+This is also linked to SGD indicator [7.1.2](https://sdg-tracker.org/energy) .
+
+The standard questions are similar to MICS and the calculation of indicators are based on [UNICEF MICS](https://mics.unicef.org/files?job=W1siZiIsIjIwMTcvMDIvMDMvMTYvMjcvMjUvNTk5L1BpY3RvcmlhbHNfV0hPX0hvdXNlaG9sZF9FbmVyZ3lfVXNlX0NhdGFsb2d1ZV9TZXB0ZW1iZXJfMjAxNl8ucGRmIl1d&sha=57b4a452fcc0ac88) and [WHO](https://www.who.int/data/gho/indicator-metadata-registry/imr-details/5662) guidance on the calculation of the same SGD indicator.
+
+| Standard Questions |
+|:------------------:|
+|   COOK01- COOK03   |
+
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals using clean fuel and technology as their primary source of cooking
+
+**Denominator**: Total number of individuals
+
+To calculate the indicator value, the standard survey methodology considers in the numerator only individuals in households that use one of the following most of the 
+time as their source for cooking are considered in the numerator:
+
+  + solar cooker
+  + electric stove
+  + piped natural gas stove
+  + biogas stove
+  + LPG/cooking gas stove
+  + liquid fuel stove with alcohol / ethanol.
+
+```{r, eval=FALSE}
+
+
+###indicator calculation
+
+main$COOK01 <- labelled_chr2dbl(main$COOK01)
+main$COOK02 <- labelled_chr2dbl(main$COOK02)
+main$COOK03 <- labelled_chr2dbl(main$COOK03)
+
+
+###Based on MICS calculation : TC4.1
+
+main <- main %>%
+  mutate(
+    outcome8_2 = case_when(
+      (COOK01 == "1" & (COOK02 %in% c("1", "2", "3", "4", "5")) | (COOK02 %in% c("10") & COOK03 %in% c("1"))
+      ) ~ 1,  # First condition for clean cooking
+      (COOK01 == "1" & (COOK02 %in% c("7", "8", "9", "10", "96")) | (COOK02 %in% c("10") & !(COOK03 %in% c("1"))
+      )) ~ 0,  # Condition for unclean cooking or incomplete clean technology
+      COOK01 == "0" ~ 0,  # COOK01 is "0"
+      TRUE ~ NA_real_  # Handle missing or other cases
+    )
+  ) %>%
+  mutate(
+    outcome8_2 = labelled(outcome8_2,
+                          labels = c(
+                            "No" = 0,
+                            "Yes" = 1
+                          ),
+                          label = "Proportion of people with primary reliance on clean (cooking) fuels and technology"
+    )
+  )
+
+
+ 
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+##Table by population groups
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+###Table 
+
+outcome8_2 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Show results disaggregated by pop groups
+  summarise(                                         # put all variables here
+    var_name = "outcome8_2",                          # name of the variable
+    num_obs_uw = unweighted(n()),                    # unweighted total count
+    denominator = survey_total(),                      # weighted total count
+    mean_value = survey_mean(outcome8_2, vartype = c("ci", "se"), na.rm = TRUE) # indicator value ( weighted) with CI and SE
+  )
+
+
+###Chart of outcome 8_2 by pop groups
+
+ggplot(outcome8_2, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  # Add labels for mean_value
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 8.2",
+    x = "Population Groups",
+    y = "Mean Value with Standard Errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+
+###Show the bar chart for COOK02
+
+table(main$COOK02)
+
+
+# Define stove categories based on the provided list
+stove_labels <- c(
+  "1" = "Solar cooker (thermal energy from the sun)",
+  "2" = "Electric stove",
+  "3" = "Piped natural gas stove",
+  "4" = "Biogas stove",
+  "5" = "Liquefied petroleum gas (LPG)/cooking gas stove",
+  "6" = "Manufactured solid fuel stove",
+  "7" = "Traditional solid fuel stove (non-manufactured)",
+  "8" = "Moveable firepan",
+  "9" = "Three stone stove/open fire",
+  "10" = "Liquid fuel stove",
+  "96" = "Other, specify"
+)
+
+# Summarize the counts and percentages for each category
+cook02_percentages <- main %>%
+  filter(!is.na(COOK02)) %>%  # Exclude missing values
+  count(COOK02) %>%
+  mutate(Percentage = n / sum(n) * 100) %>%
+  mutate(COOK02 = factor(COOK02, levels = names(stove_labels), labels = stove_labels))
+
+# Create the chart
+
+ggplot(cook02_percentages, aes(x = reorder(COOK02, Percentage), y = Percentage, fill = COOK02)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            position = position_stack(vjust = 0.5), size = 3.5) +  # Add percentage labels
+  coord_flip() +  # Flip the chart for better readability
+  labs(
+    title = "Distribution of Stove Types (COOK02)",
+    x = "Stove Type",
+    y = "Percentage",
+    caption = "Source: RMS XXX 202X"
+  ) +
+  scale_fill_unhcr_d() +  # Apply UNHCR color palette
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.y = element_text(size = 10),  # Adjust text size for readability
+    legend.position = "none"  # Remove legend for simplicity
+  )
+
+```
+
+#### How to calculate 8.2 Outcome indicator if the standard questionnaire was not used?
+
+This indicator is calculated from the standard module that is developed and used by other agencies for the calculation of SGD indicator.
+There might be slight differences on the response options, however, a similar question will have similar response options.
+You can adjust your module under [UNICEF MICS](https://mics.unicef.org/files?job=W1siZiIsIjIwMTcvMDIvMDMvMTYvMjcvMjUvNTk5L1BpY3RvcmlhbHNfV0hPX0hvdXNlaG9sZF9FbmVyZ3lfVXNlX0NhdGFsb2d1ZV9TZXB0ZW1iZXJfMjAxNl8ucGRmIl1d&sha=57b4a452fcc0ac88) and [WHO](https://www.who.int/data/gho/indicator-metadata-registry/imr-details/5662) guidance .
+
+## 9.1 Core Outcome Indicator
+
+**Proportion of Persons of Concern living in habitable and affordable housing**
+
+This indicator measures the proportion of people living in habitable and affordable housing.
+
+**Habitable housing** refers to the presence of adequate space which is defined by the minimum emergency standards. Habitable housing also refers to the fact that the housing should provide protection from cold, damp, heat, rain, wind, and other threats to health, structural hazards, and disease vectors. It should provide physical safety to its occupants. This indicator does not measure ‘adequate’ housing but focuses on whether housing is livable.
+
+**Affordable housing** refers to the fact that the cost of housing and its related expenditures on maintenance and household items should be at such a level that it should not compromise the attainment and satisfaction of other basic needs. For example, the United Nations Economic Commission for Europe refers to the fact that those who spend 40% or more of their income on housing are housing-cost overburden, while UN-Habitat places this indicator at 30%.
+
+|    Standard Questions     |
+|:-------------------------:|
+| DWE01 – SHEL01-SHEL06 – DWE05 – DWE08-DWE09 |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals living in habitable and affordable housing
+
+**Denominator**: Total number of individuals
+
+To calculate the indicator value, the standard survey methodology considers in the numerator only individuals in households with habitable housing, which is not overcrowded and those that can afford to pay rent without financial distress
+
+```{r, eval=FALSE}
+
+##Module :DWE01 – SHEL01-SHEL06 – DWE05 – DWE08-DWE09
+
+
+
+##This indicator is calculated from the main dataset
+
+##Condition 1
+
+##Classify as habitable for below conditions - if 98 selected, put into missing
+
+##First check the variables
+
+table(main$SHEL01)
+table(main$SHEL02)
+table(main$SHEL03)
+table(main$SHEL04)
+table(main$SHEL05)
+table(main$SHEL06)
+
+
+main <- main %>%
+  mutate(across(starts_with("SHEL"), ~ifelse(. == 98, NA, .))) %>%
+  mutate(habitablehousing = case_when(
+    (SHEL01 == "1") & (SHEL02 == "1") & (SHEL05 == "1") & 
+      (SHEL03 == "0" ) & (SHEL04 == "0" ) & (SHEL06 == "0" ) ~ 1,
+    (SHEL01 == "0") | (SHEL02 == "0" ) | (SHEL05 == "0") |
+      (SHEL03 == "1") | (SHEL04 == "1") | (SHEL06 == "1" ) ~ 0,
+    TRUE ~ NA_integer_
+  ))
+
+table(main$habitablehousing)
+
+
+##Condition 2
+####Calculate crowding index - overcrowded when more than 3 persons share one room to sleep
+###Overcrowding may cause health issues, thus not considered as physically safe
+
+
+table(main$hh_size_001)
+table(main$DWE05)
+
+
+main <- main %>%
+  mutate(crowding=hh_size_001/DWE05
+  ) %>%
+  mutate(dwe05_cat=case_when( ##if crowding <= 3, not overcrowded 
+    crowding <= 3 ~ 1, TRUE ~ 0)
+  )
+
+
+table(main$crowding)
+table(main$dwe05_cat)
+
+##Condition 3
+
+main <- main %>%
+  mutate(dwe09_cat = case_when( 
+    # Affordable if household pays rent and without financial distress
+    (DWE08 == "1" & (DWE09 == "1" | DWE09 == "2")) ~ 1,  # No financial distress
+    (DWE08 == "1" & (DWE09 == "3" | DWE09 == "4")) ~ 0,  # Financial distress
+    DWE08 == "0" ~ 1,  # If not paying rent, it's considered affordable (set to 1)
+    TRUE ~ NA_real_  # Catch-all for missing or unexpected values
+  ))
+
+
+table(main$dwe09_cat)
+
+###Combine all three conditions for habitable housing
+
+
+main <- main %>%
+  mutate(
+    outcome9_1 = case_when(
+      dwe05_cat == 1 & habitablehousing == 1 & dwe09_cat == 1  ~ 1,
+      TRUE ~ 0
+    ),
+    outcome9_1 = labelled(outcome9_1,
+                          labels = c("Yes" = 1, "No" = 0),
+                          label = "Proportion of people living in habitable and affordable housing")
+  )
+
+
+
+```
+
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+####Standard tables 
+
+
+composite_outcome9_1 <- main %>%
+  select(pop_groups, dwe05_cat, habitablehousing, dwe09_cat) %>%
+  pivot_longer(cols = c(dwe05_cat, habitablehousing, dwe09_cat),  # Pivot the three variables
+               names_to = "facility", 
+               values_to = "access") %>%
+  group_by(pop_groups, facility) %>%
+  summarise(percentage = mean(access, na.rm = TRUE) * 100) %>%
+  ungroup()
+
+
+
+###Chart for above with all dimensions 
+
+
+ggplot(composite_outcome9_1, aes(x = facility, y = percentage, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", percentage)), 
+            position = position_dodge(0.7), vjust = -0.5, size = 3.5) +  # Add percentage labels on bars
+  scale_fill_unhcr_d() +  # Use UNHCR color palette
+  scale_x_discrete(labels = c(
+    "dwe05_cat" = "Not overcrowded",
+    "habitablehousing" = "Habitable Housing",
+    "dwe09_cat" = "Affordable"
+  )) +  # Add descriptive labels to the x-axis
+  labs(
+    title = "Access to Housing Facilities by Population Group",
+    x = "Facility",
+    y = "Percentage Access",
+    fill = "Population Groups"
+  ) +
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate x-axis labels for readability
+    strip.text = element_text(size = 10)  # Adjust label size
+  )
+
+##Table by population groups
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+outcome9_1 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Show results disaggregated by pop groups
+  summarise(                                         # put all variables here
+    var_name = "outcome9_1",                          # name of the variable
+    num_obs_uw = unweighted(n()),                    # unweighted total count
+    denominator = survey_total(),                      # weighted total count
+    mean_value = survey_mean(outcome9_1, vartype = c("ci", "se"), na.rm = TRUE) # indicator value ( weighted) with CI and SE
+  )
+
+
+
+###Chart of impact 9.1 by pop groups
+
+ggplot(outcome9_1, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  # Add labels for mean_value
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 9.1",
+    x = "Population Groups",
+    y = "Mean Value with Standard Errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+```
+
+#### How to calculate 9.1 outcome indicator if the standard questionnaire was not used?
+
+This indicator has two different calculations.
+Habitable housing is calculated based on Sphere Standards.
+If you can match similar information from other questions, it would be then possible to calculate habitability of the shelter.
+For affordability, any information on households' ability to afford their house can be used as a proxy.
+
+
+## 9.2 Core Outcome Indicator
+
+**Proportion of people that have energy to ensure lighting**
+
+This indicator measures the proportion of forcibly displaced and stateless people who primarily rely on clean fuels for lighting.
+Clean fuels for lighting include using lighting devices connected to electricity (on/off grid, including solar panels), lighting devices using renewable energy (solar-powered lantern or flashlights), lighting devices using fuels considered clean for health such as biogas/LPG lamps and battery powered/rechargeable flashlights/lantern. It excludes the usage of polluting fuels such as oil, kerosene and gasoline and insufficient sources of lighting such as candles and open fires.
+
+The indicator for lighting is constructed from the essential questions *LIGHT01* and *LIGHT02* which captures the most used light source.
+[LSMS Guidebook](https://documents1.worldbank.org/curated/en/557341633679857128/pdf/Measuring-Energy-Access-A-Guide-to-Collecting-Data-Using-the-Core-Questions-on-Household-Energy-Use.pdf) is the main source for measuring energy access as defined for SGD 7.1.12.
+
+| Standard Questions |
+|:------------------:|
+| LIGHT01 - LIGHT02  |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals that have access to clean lighting
+
+**Denominator**: Total number of individuals
+
+To calculate the indicator value, the standard survey methodology considers in the numerator only individuals in households that use one of the following as light source most of the time:
+
+  + electricity (including solar panels)
+  + solar home systems
+  + solar-powered lantern or flashlight
+  + rechargeable flashlight, mobile, torch or lantern
+  + battery powered flashlight, torch or lantern
+  + biogas lamp
+  + LPG lamp.
+
+
+```{r, eval=FALSE}
+
+
+##Module :LIGHT01-LIGHT03
+###This basic service is calculated from the main dataset
+
+### The below Calculates percentage of PoC having access to clean fuel for lighting and / or basic connectivity (9.1 Outcome Indicator)
+
+main <- main %>%
+  mutate(outcome9_2 = case_when(
+    LIGHT01 == "1" & LIGHT02 %in% c("1", "2", "3", "4", "5", "6", "7") ~ 1,  # Conditions for "Yes" (1)
+    TRUE ~ 0  # Default to "No" (0)
+  )) %>%
+  mutate(outcome9_2 = labelled(outcome9_2,
+                               labels = c(
+                                 "Yes" = 1,
+                                 "No" = 0
+                               ),
+                               label = "Proportion of people that have energy to ensure lighting"
+  ))
+
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+##Table by population groups
+
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+outcome9_2 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Show results disaggregated by pop groups
+  summarise(                                         # put all variables here
+    var_name = "outcome9_2",                          # name of the variable
+    num_obs_uw = unweighted(n()),                    # unweighted total count
+    denominator = survey_total(),                      # weighted total count
+    mean_value = survey_mean(outcome9_2, vartype = c("ci", "se"), na.rm = TRUE) # indicator value ( weighted) with CI and SE
+  )
+
+
+###Chart of outcome 9.2 by pop groups
+
+ggplot(outcome9_2, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  # Add labels for mean_value
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 9.2",
+    x = "Population Groups",
+    y = "Mean Value with Standard Errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+
+###Show the bar chart for LIGHT02
+
+table(main$LIGHT02)
+
+
+# Define stove categories based on the provided list
+lighting_labels <- c(
+  "1" =	"Electricity",
+  "2" =	"Solar home system",
+  "3"	= "Solar-powered lantern or flashlight",
+  "4" = "Rechargeable flashlight, mobile, torch or lantern",
+  "5" = "Battery powered flashlight, torch or lantern",
+  "6" =	"Biogas lamp",
+  "7" =	"LPG lamp",
+  "8" = "Gasoline lamp",
+  "9"	= "Kerosene or paraffin lamp",
+  "10" = "Oil lamp",
+  "11" = "Candle",
+  "12" ="Open fire",
+  "96" ="Other, specify"
+)
+
+# Summarize the counts and percentages for each category
+light02_percentages <- main %>%
+  filter(!is.na(LIGHT02)) %>%  # Exclude missing values
+  count(LIGHT02) %>%
+  mutate(Percentage = n / sum(n) * 100) %>%
+  mutate(LIGHT02 = factor(LIGHT02, levels = names(lighting_labels), labels = lighting_labels))
+
+# Create the chart
+
+ggplot(light02_percentages, aes(x = reorder(LIGHT02, Percentage), y = Percentage, fill = LIGHT02)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            position = position_stack(vjust = 0.5), size = 3.5) +  # Add percentage labels
+  coord_flip() +  # Flip the chart for better readability
+  labs(
+    title = "Distribution of Energy of Lighting (LIGHT02)",
+    x = "Lighting Type",
+    y = "Percentage",
+    caption = "Source: RMS XXX 202X"
+  ) +
+  scale_fill_unhcr_d() +  # Apply UNHCR color palette
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.y = element_text(size = 10),  # Adjust text size for readability
+    legend.position = "none"  # Remove legend for simplicity
+  )
+
+
+
+
+
+```
+
+#### How to calculate 9.2 Outcome indicator if the standard questionnaire was not used?
+
+This indicator comes from standard module which is widely used in many household surveys.
+Based on the [LSMS Guidebook](https://documents1.worldbank.org/curated/en/557341633679857128/pdf/Measuring-Energy-Access-A-Guide-to-Collecting-Data-Using-the-Core-Questions-on-Household-Energy-Use.pdf), you can try to calculate the indicator.
+
+
+
+## 10.1 Core Outcome Indicator
+
+**Proportion of children aged 9 months to five years who have received measles vaccination**
+
+Coverage of measles vaccination in children in the target age group of 9 months to 5 years of age.
+Measles vaccination is an essential preventive primary care intervention to protect children from measles infection.
+
+Standard module is from [UNICEF MICS6](https://mics.unicef.org/tools#survey-design) Children under 5 module.
+The calculation of this module is also aligned with UNICEF MICS6.
+
+| Standard Questions |
+|:------------------:|
+|    MMR01-MMR04     |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of children aged 9 months to 5 years who have received a measles containing vaccine (measles or MMR - Measles Mumps and Rubella)
+
+**Denominator**: Total number of children aged 9 months to 5 years of age
+
+The standard survey methodology for this indicator is based on UNICEF MICS6, children under 5 module. It considers only children aged 9 months to 5 years in the numerator who have received at least one dose of a measles containing vaccine.
+Where administrative data are used, the number of individuals in the target group that have received measles containing vaccine is the numerator. Since the first dose of measles is usually administrated during the first year of life, the numerator may include only children under 1. The denominator will then be surviving infants (under one year).
+In that case the coverage may be a proxy indicator for children 9 months to 5 years.
+
+```{r, eval=FALSE}
+
+
+ind <- ind %>%
+  mutate(outcome10_1=case_when(
+    MMR03=="1" ~ 1, MMR03=="0"  | MMR03=="98" ~ 0)
+  ) %>%
+  mutate( outcome10_1 = labelled(outcome10_1,
+                                 labels = c(
+                                   "Yes" = 1,
+                                   "No" = 0
+                                 ),
+                                 label = "Proportion of children aged 9 months to five years who have received measles vaccination*"))
+
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+###Table 
+
+RMS_XXX_202X_ind <- ind %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+
+outcome10_1 <- RMS_XXX_202X_ind %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Group by pop_groups
+  summarise(                                         # Summarise to compute values
+    var_name = "outcome10_1",                          # Name of the variable
+    num_obs_uw = unweighted(n()),                    # Unweighted total count
+    denominator = survey_total(),                    # Weighted total count
+    mean_value = survey_mean(outcome10_1, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+
+###Chart of outcome 10.1 by pop groups
+
+ggplot(outcome10_1, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  # Add labels for mean_value
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 10.1",
+    x = "Population Groups",
+    y = "Mean Value with Standard Errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+
+##Table with disability and gender
+
+
+outcome10_1_AGD <- RMS_XXX_202X_ind %>%
+  filter(!is.na(HH04) & !is.na(disability) & !is.na(pop_groups) & HH07 < 5 ) %>%  # Exclude HH07_cat categories 1, 2, and 5
+  group_by(HH07_cat, HH04, pop_groups) %>%
+  summarise(
+    var_name = "outcome10_1",                                      # Name of the variable
+    num_obs_uw = survey_total(!is.na(outcome10_1), vartype = NULL),  # Unweighted total count
+    denominator = survey_total(),                                # Weighted total count
+    mean_value = survey_mean(outcome10_1, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with CI and SE
+  )
+
+
+##Chart with pop groups
+
+gender_colors <- c("Male" = "#8395B9", "Female" = "#E0E9FE")
+
+
+ggplot(outcome10_1_AGD, aes(x = HH04, y = mean_value, fill = HH04)) +  # Fill mapped to HH04 for gender
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.7) +
+  geom_text(aes(label = sprintf("%.2f", mean_value)), 
+            position = position_dodge(width = 0.7), vjust = -0.5, size = 3) +  # Add values on bars
+  facet_wrap(~ pop_groups) +  # Create separate plots for each population group
+  labs(
+    title = "Outcome 10.1 by Population Groups and Gender",
+    x = "Gender",
+    y = "Proportion of Children",
+    caption = "Note: Only children under 5"
+  ) +
+  scale_fill_manual(values = gender_colors) +  # Apply custom colors for male and female
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for readability
+  )
+
+
+
+```
+
+#### How to calculate 10.1 outcome indicator if the standard questionnaire was not used?
+
+This indicator comes from standard module which is widely used in many household surveys.
+Based on the guidance from MICS6, you can try to calculate your indicator if your module is different.
+
+
+## 10.2 Core Outcome Indicator
+
+**Proportion of births attended by skilled health personnel**
+
+This indicator measures the percentage of births attended by personnel trained (doctors, nurses or midwives, auxiliary midwives) in providing lifesaving obstetric care including providing the necessary supervision, care, and advice to women during pregnancy, labor, and the postpartum period; to conduct deliveries on their own; and to care for newborns.
+Note: traditional birth attendants are not included as skilled health personnel.
+
+National-level household surveys are the main data sources used to collect data for skilled health personnel providing childbirth care.
+These surveys include Demographic and Health Surveys (DHS), Multiple Indicator Cluster Surveys (MICS), Reproductive Health Surveys (RHS) and other national surveys based on similar methodologies.
+Standard module is from [UNICEF MICS6](https://mics.unicef.org/tools#survey-design) individual questionnaire for woman.
+The calculation of this module is also aligned with UNICEF MICS6.
+
+
+
+| Standard Questions |
+|:------------------:|
+|    BIR01-BIR04     |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of women aged 15-49 with a live birth attended by a skilled health personnel (e.g., doctors, nurses or midwives)
+
+**Denominator**: Total number of women aged 15-49 with a live birth in the same period
+
+The standard survey methodology for this indicator is based on UNICEF MICS6, individual questionnaire for women. To calculate the indicator, value, the standard survey methodology considers in the numerator only women aged 15-49 who had a live birth in the past two years and where birth was assisted by skilled health professionals: doctors, nurses or midwives.
+Where routine administrative data is used instead of surveys, the denominator
+
+```{r, eval=FALSE}
+
+
+##If there are live births in the last 2 years 
+
+
+main <- main %>%
+  mutate(outcome10_2 = case_when( 
+    (BIR01 == "1" | BIR02 == "1") & (BIR03 %in% c("1", "2", "3")) ~ 1,  # Skilled personnel attended
+    (BIR01 == "1" | BIR02 == "1") & (BIR03 %in% c("4", "5", "6")) ~ 0,  # Unskilled personnel attended
+    BIR03 %in% c("96", "98") ~ NA_real_,  # Missing or not applicable
+    TRUE ~ NA_real_  # Catch-all for any other cases
+  )) %>%
+  mutate(outcome10_2 = labelled(outcome10_2,
+                                labels = c(
+                                  "Yes" = 1,  # Yes for skilled personnel
+                                  "No" = 0    # No for unskilled personnel
+                                ),
+                                label = "Proportion of births attended by skilled health personnel"
+  ))
+
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+###Table 
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+outcome10_2 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Group by pop_groups
+  summarise(                                         # Summarise to compute values
+    var_name = "outcome10_2",                          # Name of the variable
+    num_obs_uw = unweighted(n()),                    # Unweighted total count
+    denominator = survey_total(),                    # Weighted total count
+    mean_value = survey_mean(outcome10_2, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+
+###Chart of outcome 10.2 by pop groups
+
+ggplot(outcome10_2, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  # Add labels for mean_value
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 10.2",
+    x = "Population Groups",
+    y = "Mean Value with Standard Errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+
+
+```
+
+#### How to calculate 10.2 outcome indicator if the standard questionnaire was not used?
+
+This indicator comes from standard module which is widely used in many household surveys.Where routine administrative data is used instead of surveys, the denominator will include all births (live and still) as opposed to counting only live births.
+
+## 12.1 Core Outcome Indicator
+
+**Proportion of people using at least basic drinking water services**
+
+This indicator is defined as the percentage of people using at least basic water services.
+Basic drinking water services is defined as drinking water from an improved source, provided collection time is not more than 30 minutes for a round trip, including queuing.
+Access to clean drinking water is essential for a person's survival and well being and a precursor for achieving protection outcomes related to health, education and economic developed.
+The calculation for access drinking water is linked to SGD Indicator [6.1.1](https://unstats.un.org/sdgs/metadata/files/Metadata-06-01-01.pdf).
+The questionnaire module and the analysis guidance is taken from [UNICEF MICS6](https://mics.unicef.org/tools#analysis).
+
+| Standard Questions |
+|:------------------:|
+|    DWA01-DWA03     |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals with access to basic drinking water services
+
+**Denominator**: Total number of individuals
+
+To calculate the indicator value, the standard survey methodology considers for the numerator only people using improved sources of drinking water either in their dwelling/yard/plot or within 30 minutes round trip collection time.
+
+
+```{r, eval=FALSE}
+
+
+## Indicator calculation
+
+main <- main %>%
+  mutate(time_DWA = case_when(
+    DWA03a == "1" ~ 1,  # If it's in hours, convert to 1 minute
+    DWA03a == "2" ~ 60  # Convert 1 hour to 60 minutes
+  )) %>%
+  mutate(time_tot = time_DWA * as.numeric(DWA03b)  # Convert DWA03b to numeric if it's not already
+  ) %>%
+  mutate(dwa_cond1 = case_when(
+    time_tot > 30 ~ 0,  # Not reachable under 30 minutes
+    TRUE ~ 1  # Reachable under 30 minutes
+  )) %>%
+  mutate(dwa_cond2 = case_when(
+    !DWA01 %in% c("7", "9", "13", "96", "98") ~ 1,  # Improved source (all except these codes)
+    TRUE ~ 0
+  )) %>%
+  mutate(dwa_cond3 = case_when(
+    DWA02 == "3" ~ 0,  # Not in the dwelling/yard/plot
+    TRUE ~ 1  # In the dwelling/yard/plot
+  )) %>%
+  mutate(outcome12_1 = case_when(
+    ((dwa_cond1 == 1 | dwa_cond3 == 1) & dwa_cond2 == 1) ~ 1,  # Basic drinking water service
+    TRUE ~ 0
+  )) %>%
+  mutate(outcome12_1 = labelled(outcome12_1,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "Proportion of people using at least basic drinking water services"
+  ))
+
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+
+####Standard tables 
+
+
+composite_outcome12_1 <- main %>%
+  select(pop_groups, dwa_cond1, dwa_cond2, dwa_cond3) %>%
+  pivot_longer(cols = c(dwa_cond1, dwa_cond2, dwa_cond3),  # Pivot the three variables
+               names_to = "facility", 
+               values_to = "conditions") %>%
+  group_by(pop_groups, facility) %>%
+  summarise(percentage = mean(conditions, na.rm = TRUE) * 100) %>%
+  ungroup()
+
+
+
+###Chart for above with all dimensions 
+
+
+ggplot(composite_outcome12_1, aes(x = facility, y = percentage, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", percentage)), 
+            position = position_dodge(0.7), vjust = -0.5, size = 3.5) +  # Add percentage labels on bars
+  scale_fill_unhcr_d() +  # Use UNHCR color palette
+  scale_x_discrete(labels = c(
+    "dwa_cond1" = "Reachable under 30 minutes",
+    "dwa_cond2" = "From an improved source",
+    "dwa_cond3" = "In the dwelling/yard/plot"
+  )) +  # Add descriptive labels to the x-axis
+  labs(
+    title = "Access to Basic Drinking Services",
+    x = "At least basic drinking water services",
+    y = "Percentage Access",
+    fill = "Population Groups"
+  ) +
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate x-axis labels for readability
+    strip.text = element_text(size = 10)  # Adjust label size
+  )
+
+##Table by population groups
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+outcome12_1 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Show results disaggregated by pop groups
+  summarise(                                         # put all variables here
+    var_name = "outcome12_1",                          # name of the variable
+    num_obs_uw = unweighted(n()),                    # unweighted total count
+    denominator = survey_total(),                      # weighted total count
+    mean_value = survey_mean(outcome12_1, vartype = c("ci", "se"), na.rm = TRUE) # indicator value ( weighted) with CI and SE
+  )
+
+
+
+###Chart of outcome 12_1 by pop groups
+
+ggplot(outcome12_1, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  # Add labels for mean_value
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 12.1",
+    x = "Population Groups",
+    y = "Mean Value with Standard Errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+```
+
+#### How to calculate 12.1 Outcome indicator if the standard questionnaire was not used?
+
+This indicator comes from standard module which is widely used in many household surveys.
+The calculation for access drinking computed under the guidance of SGD Indicator [6.1.1](https://unstats.un.org/sdgs/metadata/files/Metadata-06-01-01.pdf).
+This guidance will guide you if you have a similar questionnaire module.
+
+
+## 12.2 Core Outcome Indicator
+
+**Proportion of people with access to a safe household toilet**
+
+This indicator measures the proportion of people with access to at least basic sanitation services.
+
+A toilet is defined as a basic sanitation facility.
+This indicator is linked to SGD indicator [6.2.1](https://sdg-tracker.org/water-and-sanitation#:~:text=Definition%3A%20Indicator%206.2.,at%20least%20basic%20handwashing%20facilities.).
+The standard module is taken from [UNICEF MICS6](https://mics.unicef.org/tools#analysis) main household questionnaire.
+Calculation of the indicator is based on [MICS6 analysis tools](https://mics.unicef.org/tools#analysis).
+
+| Standard Questions |
+|:------------------:|
+|    TOI01-TOI05     |
+
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals with access to sanitation facility at their household
+
+**Denominator**: Total number of individuals
+
+To calculate the indicator value, the standard survey methodology considers for the numerator only individuals in households with improved sanitation facilities that are emptied safely and that are not shared with other households.
+
+```{r, eval=FALSE}
+
+
+##This indicator measures the proportion of people with access to at 
+##least basic sanitation services.
+
+##MICS calculation WS3.1/WS3.4
+
+
+###Indicator calculations
+
+main <- main %>%
+  mutate(toi_cond1 = case_when(
+    TOI01 %in% c("1", "2", "3", "4", "5", "6", "7", "9") ~ 1,  # Improved sanitation facility
+    TOI01 %in% c("8", "10", "11", "12", "96") ~ 0,  # Unimproved sanitation facility
+    TRUE ~ NA_real_  # Missing or invalid
+  )) %>%
+  mutate(toi_cond2 = case_when(
+    TOI02 == "1" & TOI03 %in% c("5", "96", "98") ~ 0,  # Unsafe disposal
+    TOI02 == "1" & TOI03 %in% c("1", "2", "3", "4") ~ 1,  # Safe disposal
+    TOI02 == "2" ~ 0,  # Unsafe if no toilet
+    TOI02 == "98" ~ 0,  # Unavailable information
+    TRUE ~ NA_real_  # Missing or invalid
+  )) %>%
+  mutate(toi_cond3 = case_when(
+    TOI05 == "1" ~ 0,  # Shared toilet
+    TOI05 == "0" ~ 1   # Not shared
+  )) %>%
+  
+  ### Combine all three conditions
+  mutate(outcome12_2 = case_when(
+    toi_cond1 == 1 & toi_cond2 == 1 & toi_cond3 == 1 ~ 1,  # Basic sanitation service
+    TRUE ~ 0  # If any condition fails
+  )) %>%
+  mutate(outcome12_2 = labelled(outcome12_2,
+                                labels = c(
+                                  "Yes" = 1,
+                                  "No" = 0
+                                ),
+                                label = "This indicator measures the proportion of people with access to at least basic sanitation services."
+  ))
+
+
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+
+####Standard tables 
+
+
+composite_outcome12_2 <- main %>%
+  select(pop_groups, toi_cond1, toi_cond2, toi_cond3) %>%
+  pivot_longer(cols = c(toi_cond1, toi_cond2, toi_cond3),  # Pivot the three variables
+               names_to = "facility", 
+               values_to = "conditions") %>%
+  group_by(pop_groups, facility) %>%
+  summarise(percentage = mean(conditions, na.rm = TRUE) * 100) %>%
+  ungroup()
+
+
+
+###Chart for above with all dimensions 
+
+
+ggplot(composite_outcome12_2, aes(x = facility, y = percentage, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", percentage)), 
+            position = position_dodge(0.7), vjust = -0.5, size = 3.5) +  # Add percentage labels on bars
+  scale_fill_unhcr_d() +  # Use UNHCR color palette
+  scale_x_discrete(labels = c(
+    "toi_cond1" = "Improved sanitation facility",
+    "toi_cond2" = "Safe disposal in situ of excreta",
+    "toi_cond3" = "Toilet is not shared with other households"
+  )) +  # Add descriptive labels to the x-axis
+  labs(
+    title = "Access to Basic Drinking Services",
+    x = "Improved Toilet",
+    y = "Percentage Access",
+    fill = "Population Groups"
+  ) +
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate x-axis labels for readability
+    strip.text = element_text(size = 10)  # Adjust label size
+  ) + 
+  scale_y_continuous(limits=c(0,100), expand = c(0,0)) ### limit if needed
+
+##Table by population groups
+
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+outcome12_2 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Show results disaggregated by pop groups
+  summarise(                                         # put all variables here
+    var_name = "outcome12_2",                          # name of the variable
+    num_obs_uw = unweighted(n()),                    # unweighted total count
+    denominator = survey_total(),                      # weighted total count
+    mean_value = survey_mean(outcome12_2, vartype = c("ci", "se"), na.rm = TRUE) # indicator value ( weighted) with CI and SE
+  )
+
+
+
+###Chart of outcome 12_2 by pop groups
+
+ggplot(outcome12_2, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  # Add labels for mean_value
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 12.2",
+    x = "Population Groups",
+    y = "Mean Value with Standard Errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+
+
+```
+
+#### How to calculate 12.2 Outcome indicator if the standard questionnaire was not used?
+
+This indicator comes from standard module which is widely used in many household surveys.
+The calculation can be done by using MICS6 resources if other questionnaire modules will be used as a proxy with the following guidance [6.2.1](https://sdg-tracker.org/water-and-sanitation#:~:text=Definition%3A%20Indicator%206.2.,at%20least%20basic%20handwashing%20facilities.).
+
+
+## 13.1 Core Outcome Indicator
+
+**Proportion of people with an account at a bank or other financial institution or with a mobile-money-service provider**
+
+This indicator measures the percentage of persons of concern (ages 15+) who report having an account (by themselves or together with someone else) at a bank or another type of financial institution or personally using a mobile money service in the past 12 months in the country of asylum or habitual residence (for returnees, countries of origin are included).
+
+The methodology is taken from [The Global Findex Database](https://www.worldbank.org/en/publication/globalfindex) which is developed by the World Bank.
+This indicator is also linked to SGD Indicator [8.10.2](https://unstats.un.org/sdgs/metadata/files/Metadata-08-10-02.pdf).
+
+| Standard Questions |
+|:------------------:|
+|   BANK01-BANK05    |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals above 18 having a personal mobile or bank account
+
+**Denominator**: Total number of individuals above 18
+
+To calculate the indicator value, the standard survey methodology considers for the numerator only individuals who report having an account (by themselves or together with someone else) at a bank or another type of financial institution or personally using a mobile money service in the past 12 months in the country of asylum or habitual residence (for returnees, countries of origin are included).
+
+```{r, eval=FALSE}
+
+
+##This indicator comes from main dataset based on the respondent randomly selected for individual level
+
+
+main <- main %>%
+  mutate(
+    outcome13_1 = case_when(
+      BANK01 == "1" | BANK02 == "1" | BANK03 == "1" | BANK05 == "1" ~ 1,  # If any is "1", set to 1
+      BANK01 == "0" & BANK02 == "0" & BANK03 == "0" & BANK05 == "0" ~ 0,  # If all are "0", set to 0
+      TRUE ~ 0  # Default to 0 for all other cases
+    )
+  ) %>%
+  mutate(outcome13_1 = labelled(outcome13_1,
+                                labels = c(
+                                  "Yes" = 1,  # Label for Yes
+                                  "No" = 0    # Label for No
+                                ),
+                                label = "Proportion of people with an account at a bank or other financial institution or with a mobile-money-service provider"
+  ))
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+
+###Show all options separately 
+
+
+
+composite_outcome13_1 <- main %>%
+  select(pop_groups, BANK01, BANK02,  BANK04, BANK05) %>%
+  pivot_longer(cols = c(BANK01, BANK02, BANK04, BANK05),  # Pivot the three variables
+               names_to = "access", 
+               values_to = "conditions") %>%
+  group_by(pop_groups, access) %>%
+  summarise(percentage = mean(conditions, na.rm = TRUE) * 100) %>%
+  ungroup()
+
+
+
+###Chart for above with all dimensions 
+
+ggplot(composite_outcome13_1, aes(x = access, y = percentage, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7), width = 0.7) +  # Correct stat to "identity"
+  geom_text(aes(label = sprintf("%.1f%%", percentage)), 
+            position = position_dodge(0.7), vjust = -0.5, size = 3.5) +  # Add percentage labels on bars
+  scale_fill_unhcr_d() +  # Use UNHCR color palette
+  scale_x_discrete(labels = c(
+    "BANK01" = "Account in financial institution",
+    "BANK02" = "Have a ATM/debit card",
+    "BANK04" = "Used mobile money in the last 12 months",
+    "BANK05" = "Personally used mobile money in the last 12 months"
+  )) +  # Add descriptive labels to the x-axis
+  labs(
+    title = "Percentage of People Financially Included",
+    x = "Financial Inclusion",
+    y = "Percentage",
+    fill = "Population Groups"
+  ) +
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),  # Rotate x-axis labels for readability
+    strip.text = element_text(size = 10)  # Adjust label size
+  ) +
+  scale_y_continuous(limits = c(0, 50), expand = c(0, 0))  # Limit y-axis from 0 to 100%
+
+
+###Table standard 
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+outcome13_1 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Group by pop_groups
+  summarise(                                         # Summarise to compute values
+    var_name = "outcome13_1",                          # Name of the variable
+    num_obs_uw = unweighted(n()),                    # Unweighted total count
+    denominator = survey_total(),                    # Weighted total count
+    mean_value = survey_mean(outcome13_1, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+##Chart for the indicator above
+
+
+
+ggplot(outcome13_1, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 13.1",
+    x = "Population Groups",
+    y = "Mean Value with standard errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+#### Table and chart that shows results by age/sex/diversity
+
+outcome13_1_AGD <- RMS_XXX_202X_main %>%
+  filter(!is.na(HH04) & !is.na(disability) & !is.na(HH07_cat) & HH07 > 18) %>%  # Exclude HH07_cat categories 1, 2, and 5
+  group_by(HH07_cat, HH04, disability) %>%
+  summarise(
+    var_name = "outcome13_1",                                      # Name of the variable
+    num_obs_uw = survey_total(!is.na(outcome13_1), vartype = NULL),  # Unweighted total count
+    denominator = survey_total(),                                # Weighted total count
+    mean_value = survey_mean(outcome13_1, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with CI and SE
+  )
+
+
+
+
+```
+
+#### How to calculate 13.1 Outcome indicator if the standard questionnaire was not used?
+
+This indicator comes from standard module which is specifically developed to measure individual's ownership of accounts.
+As financial inclusion is an individual-level concept, this is the appropriate measure.
+Other surveys that are done at household level may measure the access to finance through another member of the household which may overestimate financial inclusion.
+If you are using another resource as a proxy, please consider the point above.
+
+
+## 13.2 Core Outcome Indicator
+
+**Proportion of people who self-report positive changes in their income compared to previous year**
+
+This indicator measures the proportion of forcibly displaced and stateless people who self-report positive changes in their income compared to the previous year. It aims to track changes in income levels compared to the previous year.
+
+| Standard Questions |
+|:------------------:|
+|       INC01 - INC02       |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals of working age who self-report increased income compared to the previous year
+
+**Denominator**: Total number of individuals of working age
+
+Note that the working age population is to be defined by each country context in line with legal definitions, this could be those aged between 18 and 65.
+To calculate the indicator value, the standard survey methodology considers for the numerator only individuals who state their income increased and who can also afford more goods and services, or those whose income remained the same or decreased but 
+who can still afford more goods and services (to account for possible inflation).
+
+```{r, eval=FALSE}
+
+###13.2 Proportion of people who self-report positive changes in their income compared to previous year
+##Module :INC01 - INC02
+
+
+###To calculate the indicator value, the standard survey methodology considers 
+###for the numerator only individuals who state their income increased and 
+##who can also afford more goods and services, or those whose income 
+##remained the same or decreased but who can still afford more goods 
+##and services (to account for possible inflation).
+###To calculate the indicator value, the standard survey methodology considers 
+###for the numerator only individuals who state their income increased and 
+##who can also afford more goods and services, or those whose income 
+##remained the same or decreased but who can still afford more goods 
+##and services (to account for possible inflation).
+
+main <- main %>%
+  mutate(outcome13_2 = case_when(
+    INC01 == "1" & INC02 == "1" ~ 1,  # Income increased and can afford more
+    (INC01 == "2" | INC01 == "3") & INC02 == "1" ~ 1,  # Income decreased/same and can afford more
+    TRUE ~ 0  # Default to 0
+  )) %>%
+  mutate(outcome13_2 = labelled(outcome13_2,
+                                labels = c(
+                                  "Yes" = 1,  # Label for Yes
+                                  "No" = 0    # Label for No
+                                ),
+                                label = "Proportion of people who self-report positive changes in their income compared to previous year"
+  ))
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+###Check INC01 and INC02 
+
+
+
+# Define stove categories based on the provided list
+inc01_labels <- c(
+  "1" = "Increased compared to previous year",
+  "2" = "Been the same compared to previous year",
+  "3" = "Decreased compared to previous year"  
+)
+
+# Summarize the counts and percentages for each category
+INC01_percentages <- main %>%
+  filter(!is.na(INC01)) %>%  # Exclude missing values
+  count(INC01) %>%
+  mutate(Percentage = n / sum(n) * 100) %>%
+  mutate(INC01 = factor(INC01, levels = names(inc01_labels), labels = inc01_labels))
+
+
+# Create the chart
+
+ggplot(INC01_percentages, aes(x = reorder(INC01, Percentage), y = Percentage, fill = INC01)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            position = position_stack(vjust = 0.5), size = 3.5) +  # Add percentage labels
+  coord_flip() +  # Flip the chart for better readability
+  labs(
+    title = "Changes in income in the last 12 months (INC01)",
+    x = "Changes",
+    y = "Percentage",
+    caption = "Source: RMS XXX 202X"
+  ) +
+  scale_fill_unhcr_d() +  # Apply UNHCR color palette
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.y = element_text(size = 10),  # Adjust text size for readability
+    legend.position = "none"  # Remove legend for simplicity
+  )
+
+
+
+###INC02
+
+
+
+
+# Define stove categories based on the provided list
+inc02_labels <- c(
+  "1" = "More",
+  "2" = "The same",
+  "3" = "Fewer"  
+)
+
+# Summarize the counts and percentages for each category
+
+INC02_percentages <- main %>%
+  filter(!is.na(INC02)) %>%  # Exclude missing values
+  count(INC02) %>%
+  mutate(Percentage = n / sum(n) * 100) %>%
+  mutate(INC02 = factor(INC02, levels = names(inc02_labels), labels = inc02_labels))
+
+
+# Create the chart
+
+ggplot(INC02_percentages, aes(x = reorder(INC02, Percentage), y = Percentage, fill = INC02)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            position = position_stack(vjust = 0.5), size = 3.5) +  # Add percentage labels
+  coord_flip() +  # Flip the chart for better readability
+  labs(
+    title = "Changes in income in the last 12 months (INC01)",
+    x = "Affordability",
+    y = "Percentage",
+    caption = "Source: RMS SSD 2023"
+  ) +
+  scale_fill_unhcr_d() +  # Apply UNHCR color palette
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.y = element_text(size = 10),  # Adjust text size for readability
+    legend.position = "none"  # Remove legend for simplicity
+  )
+
+
+
+###Table standard 
+
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+outcome13_2 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Group by pop_groups
+  summarise(                                         # Summarise to compute values
+    var_name = "outcome13_2",                          # Name of the variable
+    num_obs_uw = unweighted(n()),                    # Unweighted total count
+    denominator = survey_total(),                    # Weighted total count
+    mean_value = survey_mean(outcome13_2, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+##Chart for the indicator above
+
+
+
+ggplot(outcome13_2, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 13.2",
+    x = "Population Groups",
+    y = "Mean Value with standard errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+#### Table and chart that shows results by age/sex/diversity
+
+outcome13_2_AGD <- RMS_XXX_202X_main %>%
+  filter(!is.na(HH04) & !is.na(disability) & !is.na(HH07_cat) & HH07 > 18) %>%  # Exclude HH07_cat categories 1, 2, and 5
+  group_by(HH07_cat, HH04, disability) %>%
+  summarise(
+    var_name = "outcome13_2",                                      # Name of the variable
+    num_obs_uw = survey_total(!is.na(outcome13_2), vartype = NULL),  # Unweighted total count
+    denominator = survey_total(),                                # Weighted total count
+    mean_value = survey_mean(outcome13_2, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with CI and SE
+  )
+
+
+
+```
+
+#### How to calculate 13.2 outcome indicator if the standard questionnaire was not used?
+
+A related indicator for which data can be collected through comprehensive socioeconomic assessments is on population-wide poverty levels.If you have a similar question, please make sure that recall period matches with the standard module.(1 year period)
+
+## 13.3 Core Outcome Indicator
+
+**Proportion of people (working age) who are unemployed**
+
+This indicator measures the level of unemployment among forcibly displaced and stateless people.
+
+*Unemployed persons* are defined as all those of working age (i.e., in the workforce - to be defined by each country context in line with legal definition) who were not in employment, carried out activities to seek employment during the past 7 days and were currently available to take up employment (SDG Indicator 8.5.2).
+
+*Persons in employment* are defined as all those of working age (i.e., in the workforce - to be defined by each country context in line with legal definition) who, during the past 7 days, were engaged in any activity to produce goods or provide services for pay or profit (SDG Indicator 8.5.2).
+The 7 days recall period is in alignment with ILO standard methodology as well as with UNHCR Socio-economic assessment standard.
+
+The standard questionnaire module is from [Standardized Employment Module](https://www.unhcr.org/5ea81b954) of UNHCR.
+The calculations are also done based on the same guidance.
+
+| Standard Questions |
+|:------------------:|
+|   UNEM01-UNEM10    |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals of working age who are unemployed within a country
+
+**Denominator**: Total number of individuals of working age (often referred to as ‘labour force’)
+
+Note that the working age population is to be defined by each country context in line with legal definitions, this could be those aged between 18 and 65.
+To calculate the indicator value, the standard survey methodology considers for the numerator only individuals of working age who were not in employment and seeking a job within 7 days prior to the reference date and who are available to start work within within the next 14 days.
+Individuals who worked for pay or profit, even if only for one hour, in past 7 days, or who were temporarily absent from a job to which they will return are considered employed
+
+```{r, eval=FALSE}
+
+##Indicator calculations
+
+### Include only the labour force ( those who are in labour force)
+### International standard is 15+ 
+### Eurostat calculates for 18+ as in standard RMS Q V3.2
+
+
+main <- main %>%
+  # Create a working_age flag for those who are 18+ years old (numeric)
+  mutate(working_age = case_when(
+    HH07 >= 18 ~ 1,  # If 18 or older, mark as working age (numeric)
+    TRUE ~ NA_real_  # Set to NA if not 18+
+  )) %>%
+  
+  # Determine who is employed based on various conditions (character comparisons, numeric outcome)
+  mutate(employed = case_when(
+    UNEM01 == "1" & working_age == 1 ~ 1,  # Paid employment - employees
+    (UNEM02 == "1" & UNEM07 == "3") & working_age == 1 ~ 1,  # Self-employment
+    (UNEM03 == "1" & UNEM07 == "3") & working_age == 1 ~ 1,  # Unpaid contributing family workers
+    UNEM04 == "1" & working_age == 1 ~ 1,  # Absent but still employed
+    (UNEM05 == "1" & UNEM06 == "3") & working_age == 1 ~ 1,  # Absent but self-employed
+    (UNEM02 == "1" & UNEM07 %in% c("1", "2") & UNEM08 %in% c("1", "2")) & working_age == 1 ~ 1,  # Farming/rearing/fishing for sale
+    (UNEM05 == "1" & UNEM06 %in% c("1", "2") & UNEM08 %in% c("1", "2")) & working_age == 1 ~ 1,  # Absent but farming for sale
+    working_age == 1 ~ 0,  # If working age but none of the above, mark as not employed
+    TRUE ~ NA_real_  # Set to NA for those not in the working age group
+  )) %>%
+  
+  # Define unemployed: those not employed but actively looking for work
+  mutate(unemployed = case_when(
+    (employed == 0 & UNEM09 == "1" & UNEM10 == "1") & working_age == 1 ~ 1,  # Actively looking for work
+    working_age == 1 ~ 0,  # Not unemployed if not actively looking or employed
+    TRUE ~ NA_real_  # Set to NA for those not in the working age group
+  )) %>%
+  
+  # Define labour force: anyone employed or unemployed
+  mutate(labour_force = case_when(
+    (employed == 1 | unemployed == 1) & working_age == 1 ~ 1,  # Employed or actively seeking work
+    working_age == 1 ~ 0,  # Not in labour force but 18+
+    TRUE ~ NA_real_  # Set to NA for those not in the working age group
+  )) %>%
+  
+  # Outcome: unemployment status among those in the labor force (numeric outcome)
+  mutate(outcome13_3 = case_when(
+    employed == 1 & labour_force == 1 ~ 0,  # If employed, outcome is 0 (not unemployed)
+    unemployed == 1 & labour_force == 1 ~ 1,  # If unemployed, outcome is 1
+    TRUE ~ NA_real_  # Catch-all for cases not in the labor force or with missing data
+  ))
+
+
+
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+
+######Table standard 
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+outcome13_3 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Group by pop_groups
+  summarise(                                         # Summarise to compute values
+    var_name = "outcome13_3",                          # Name of the variable
+    num_obs_uw = unweighted(n()),                    # Unweighted total count
+    denominator = survey_total(),                    # Weighted total count
+    mean_value = survey_mean(outcome13_3, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+##Chart for the indicator above
+
+
+
+ggplot(outcome13_3, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 13.3",
+    x = "Population Groups",
+    y = "Mean Value with standard errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+#### Table and chart that shows results by age/sex/diversity
+
+outcome13_3_AGD <- RMS_XXX_202X_main %>%
+  filter(!is.na(disability) & !is.na(HH07_cat) & HH07 > 18) %>%  # Exclude HH07_cat categories 1, 2, and 5
+  group_by(HH07_cat, disability,pop_groups ) %>%
+  summarise(
+    var_name = "outcome13_3",                                      # Name of the variable
+    num_obs_uw = survey_total(!is.na(outcome13_3), vartype = NULL),  # Unweighted total count
+    denominator = survey_total(),                                # Weighted total count
+    mean_value = survey_mean(outcome13_3, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with CI and SE
+  )
+
+
+
+
+
+```
+
+#### How to calculate 13.3 Outcome indicator if the standard questionnaire was not used?
+
+Unemployment rates are complex and require a specific modules to calculate.
+If you did not use the standard one, please discuss with your DIMA for further guidance to use another source to calculate unemployment rates as a proxy.
+
+## 14.1 Core Outcome Indicator
+
+**Proportion of returnees with legally recognized identity documents or credentials**
+
+This indicator measures the proportion of returned refugees who possess legally recognized and valid identity documents or credentials to support their return .
+
+Commonly in the context of return, returnees require civil documentation or credentials and inclusion in or updating of civil registries , as well as access to services.
+
+***Definitions***
+
+• Identity document or credential is any document or credential which may be used as proof of identity, which may also include reference to the individuals' legal status and associated rights vis-à-vis the host State and/or UNHCR.
+
+|          Standard Questions           |
+|:-------------------------------------:|
+| REG01 - REG02 - REG03 / REG05 - REG06 |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of returned refugees with legally recognized identity documents or credentials
+
+**Denominator**: Total number of returned refugees
+
+```{r, eval=FALSE}
+
+###DISAGGREGATE FOR REFUGEE RETURNEES ONLY 
+
+
+ind <- ind %>%
+  # Calculate identity documents for children under 5
+  mutate(document_under5 = case_when(
+    REG05a == "1" | REG05b == "1" | REG05c == "1" | REG05d == "1" | REG05e == "1" | REG05f == "1" | REG06 == "1" | REG03 == "1" ~ 1,  # Document present
+    REG05a == "0" & REG05b == "0" & REG05c == "0" & REG05d == "0" & REG05e == "0" & REG05f == "0" & REG06 == "0" & REG03 == "0" ~ 0,  # No document
+    TRUE ~ NA_real_  # Missing or invalid data
+  )) %>%
+  
+  # Calculate valid identity documents for people over 5
+  mutate(document_above5 = case_when(
+    REG01a == "1" | REG01b == "1" | REG01c == "1" | REG01d == "1" | REG01e == "1" | REG01f == "1" | REG01g == "1" | REG02 == "1" ~ 1,  # Document present
+    REG01a == "0" & REG01b == "0" & REG01c == "0" & REG01d == "0" & REG01e == "0" & REG01f == "0" & REG01g == "0" & REG02 == "0" ~ 0,  # No document
+    TRUE ~ NA_real_  # Missing or invalid data
+  )) %>%
+  
+  # Combine both age groups (under 5 and above 5)
+  mutate(outcome14_1 = case_when(
+    (document_above5 == 1 | document_under5 == 1) ~ 1,  # If either age group has a document, mark as "Yes"
+    (document_above5 == 0 & document_under5 == 0) ~ 0,  # If neither age group has a document, mark as "No"
+    TRUE ~ NA_real_  # Missing or invalid data
+  )) %>%
+  
+  # Label the outcome variable
+  mutate(outcome14_1 = labelled(outcome14_1,
+                                labels = c(
+                                  'Yes' = 1,
+                                  'No' = 0
+                                ),
+                                label = "Proportion of returnees with legally recognized identity documents or credentials"
+  ))
+
+
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+#### Table for indicator
+
+
+###Table by population groups
+
+RMS_XXX_202X_ind <- ind %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+outcome14_1 <- RMS_XXX_202X_ind %>%
+  filter(pop_groups == 'Refugee returnees') %>%  # Use equivalent of pop groups for refugee returnees
+  group_by(pop_groups) %>%  # Group by pop_groups
+  summarise(  
+    var_name = "outcome14_1",  # Name of the variable
+    num_obs_uw = unweighted(n()),  # Unweighted total count
+    denominator = survey_total(),  # Weighted total count
+    mean_value = survey_mean(outcome14_1, vartype = c("ci", "se"), na.rm = TRUE)  # Compute mean with NA removed
+  )
+
+
+```
+
+#### How to calculate 14.1 outcome indicator if the standard questionnaire was not used?
+
+This indicator can be calculated if there is a question on the availability of legally recognized identity documents or credentials.
+
+If you are not able to calculate your indicators from the questions you have, please discuss with your DIMA in your region to have support on the calculations.
+
+## 16.1 Core Outcome Indicator
+
+**Proportion of people with secure tenure rights to housing and/or land**
+
+This indicator measures the proportion of forcibly displaced and stateless persons that have secure tenure rights to housing and/or land.
+
+Secure tenure for forcibly displaced and stateless persons means that they can live in their homes without fear of forced eviction – whether via communal arrangements or individual, exclusive rights in land parcels. It further denotes the certainty that individual or group rights in housing and/or land will be protected when/if challenged. Improved perceptions of security of tenure will likely increase interest and willingness to invest in housing (and livelihoods), which in turn improves self-reliance and integration prospects.
+
+This indicator is linked to SGD Indicator [1.4.2](https://unstats.un.org/sdgs/metadata/files/Metadata-01-04-02.pdf). The further guidance can be found [here](https://gltn.net/download/measuring-individuals-rights-to-land-an-integrated-approach-to-data-collection-for-sdg-indicators-1-4-2-and-5-a-1-english/?wpdmdl=16316&refresh=5efb342458df61593521188)
+
+*Concept*
+
+-   Secure tenure rights: comprised of two sub-components: (i) legally recognized documentation and (ii) perception of the security of tenure, which are both necessary to provide a full measurement of tenure security.
+
+-   Legally recognized documentation: Legal documentation of rights refers to the recording and publication of information on the nature and location of land, rights and right holders in a form that is recognized by government, and is therefore official.
+
+-   Perceived security of tenure: Perception of tenure security refers to an individual's perception of the likelihood of involuntary loss of land, such as disagreement of the ownership rights over land or ability to use it, regardless of the formal status and can be more optimistic or pessimistic.
+
+|    Standard Questions     |
+|:-------------------------:|
+| DWE06_land – DWE06a_land – DWE07_land - DWE06_housing – DWE06a_housing – DWE07_housing – DWE10 |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals with secure tenure rights to housing and/or land
+
+**Denominator**: Total number individuals
+
+To calculate the indicator value, the standard RMS methodology considers in the numerator only individuals in households with official documentation for both their housing and land and who are unlikely to experience losing their right to this housing and/or land in the next 12 months.
+The standard survey questions refer to both factual information regarding documentary evidence of tenure, and perceptions regarding the likelihood of one being evicted from land and/or housing.
+
+```{r, eval=FALSE}
+
+##Module :DWE06_land – DWE06a_land – DWE07_land - DWE06_housing – DWE06a_housing – DWE07_housing – DWE10
+
+# likelihood of losing right for housing is unlikely
+# Have the documentation both for land and housing
+
+main <- main %>%
+  mutate(outcome16_1 = case_when(
+    (DWE10 %in% c("1", "2")) & (DWE06a_land == "1" & DWE06a_housing == "1") ~ 1,  # Likelihood of losing right is unlikely and has documentation
+    DWE06a_land == "0" | DWE06a_housing == "0" | DWE10 %in% c("3", "4") ~ 0,  # No documentation or likely to lose the right
+    TRUE ~ NA_real_  # Handle missing values
+  )) %>%
+  mutate(outcome16_1 = labelled(outcome16_1,
+                                labels = c("No" = 0, "Yes" = 1),
+                                label = "Proportion of people with secure tenure rights to housing and/or land"))
+
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+##Table by population groups
+
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+outcome16_1 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Show results disaggregated by pop groups
+  summarise(                                         # put all variables here
+    var_name = "outcome16_1",                          # name of the variable
+    num_obs_uw = unweighted(n()),                    # unweighted total count
+    denominator = survey_total(),                      # weighted total count
+    mean_value = survey_mean(outcome16_1, vartype = c("ci", "se"), na.rm = TRUE) # indicator value ( weighted) with CI and SE
+  )
+
+
+###Chart of impact 16_1 by pop groups
+
+ggplot(outcome16_1, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  # Add labels for mean_value
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 16.1",
+    x = "Population Groups",
+    y = "Mean Value with Standard Errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+
+
+###Check on DWE10
+
+
+table(main$DWE10)
+# Define DWE10 categories based on the provided list
+DWE10_labels <- c(
+  "1" = "Very unlikely",
+  "2" = "Somewhat unlikely",
+  "3" = "Somewhat likely",
+  "4" = "Very likely",
+  "99" = "Don't know"
+)
+
+# Convert DWE10 to a factor with correct levels and labels BEFORE summarizing
+main <- main %>%
+  mutate(DWE10 = factor(DWE10, levels = names(DWE10_labels), labels = DWE10_labels))
+
+# Summarize the counts and percentages for each category
+DWE10_percentages <- main %>%
+  filter(!is.na(DWE10)) %>%  # Exclude missing values
+  count(DWE10) %>%
+  mutate(Percentage = n / sum(n) * 100)  # Calculate percentage based on total valid responses
+
+
+
+# Create the chart
+
+ggplot(DWE10_percentages, aes(x = reorder(DWE10, Percentage), y = Percentage, fill = DWE10)) +
+  geom_bar(stat = "identity", width = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            position = position_stack(vjust = 0.5), size = 3.5) +  # Add percentage labels
+  coord_flip() +  # Flip the chart for better readability
+  labs(
+    title = "Likelihood of losing housing/land in the next 12 months",
+    x = "Likelihood",
+    y = "Percentage",
+    caption = "Source: RMS SSD 2023"
+  ) +
+  scale_fill_unhcr_d() +  # Apply UNHCR color palette
+  theme_unhcr() +  # Apply UNHCR theme
+  theme(
+    axis.text.y = element_text(size = 10),  # Adjust text size for readability
+    legend.position = "none"  # Remove legend for simplicity
+  )
+
+
+
+```
+
+#### How to calculate 16.1 Outcome indicator if the standard questionnaire was not used?
+
+Similar questions on secure tenure rights, legally recognized documentation and perceived security of tenure ca be used as a proxy to calculate the indicator.  
+
+
+## 16.2 Core Outcome Indicator
+
+**Proportion of people covered by national social protection systems**
+
+This indicator measures the proportion of people who receive government social protection benefits and services as a result of inclusion in national social protection systems. This counts those who actually receive social protection benefits or are actively contributing to a social insurance scheme.
+Social protection is a set of policies and programmes aimed at preventing or protecting all people against poverty, vulnerability and social exclusion throughout their life-course, with particular emphasis on vulnerable groups. For persons of concern, being part of a social protection system is a measure of integration and stability. This indicator is linked to SGD indicator [1.3.1](https://unstats.un.org/sdgs/metadata/files/Metadata-01-03-01a.pdf).
+
+This indicator focuses on the social benefits received from the government in which UNHCR might be supporting UNHCR.
+
+
+
+|    Standard Questions     |
+|:-------------------------:|
+| SPF01                     |
+
+**Unit of observation**: Individual
+
+**Numerator**: Number of individuals who benefit from national social protection systems
+
+**Denominator**: Total number of individuals
+
+To calculate the indicator value, the standard RMS methodology considers in the numerator only individuals in households where any household member has received any benefits from the national or local government social protection system in the country in the last 12 months.
+
+```{r, eval=FALSE}
+
+##This indicator is calculated from the main dataset
+
+#Module :UNHCR Core Indicator Metadata SPF01
+
+main <- main %>%
+  # Convert labelled/factor SPF01 columns to numeric
+  mutate(across(starts_with("SPF01"), ~ as.numeric(as.character(.)))) %>%
+  
+  rowwise() %>%
+  mutate(outcome16_2 = case_when(
+    any(c_across(starts_with("SPF01")) == 1) ~ 1,  # If any SPF01 column has 1
+    all(c_across(starts_with("SPF01")) == 0) ~ 0,  # If all SPF01 columns are 0
+    TRUE ~ 0                                      # Default case
+  )) %>%
+  
+  # Add labels for outcome16_2
+  mutate(outcome16_2 = labelled(outcome16_2,
+                                labels = c(
+                                  'Yes' = 1,
+                                  'No' = 0
+                                ),
+                                label = "Proportion of people covered by national social protection systems"))
+
+
+
+
+
+```
+
+Once you have the indicator variable, you can run descriptive statistics as below.
+
+```{r, eval=FALSE}
+
+##Table by population groups
+
+
+
+RMS_XXX_202X_main <- main %>%
+  as_survey_design(
+    ids = NULL,           # Specify the column with cluster IDs
+    weights = NULL, # Specify the column with survey weights
+    nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
+  )
+
+
+outcome16_2 <- RMS_XXX_202X_main %>%
+  filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
+  group_by(pop_groups) %>%                           # Show results disaggregated by pop groups
+  summarise(                                         # put all variables here
+    var_name = "outcome16_2",                          # name of the variable
+    num_obs_uw = unweighted(n()),                    # unweighted total count
+    denominator = survey_total(),                      # weighted total count
+    mean_value = survey_mean(outcome16_2, vartype = c("ci", "se"), na.rm = TRUE) # indicator value ( weighted) with CI and SE
+  )
+
+
+###Chart of impact 16_1 by pop groups
+
+ggplot(outcome16_2, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_errorbar(aes(ymin = mean_value - mean_value_se, ymax = mean_value + mean_value_se),
+                width = 0.2, position = position_dodge(0.7)) +
+  geom_text(aes(label = round(mean_value, 2)), 
+            vjust = -0.5, position = position_dodge(0.7)) +  # Add labels for mean_value
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) +
+  labs(
+    title = "Results of RBM Core Outcome 16.2",
+    x = "Population Groups",
+    y = "Mean Value with Standard Errors"
+  ) +
+  scale_fill_unhcr_d() +  # Use UNHCR color palette (requires unhcrthemes package)
+  theme_unhcr() +         # Apply UNHCR theme (requires unhcrthemes package)
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)  # Rotate x-axis labels for better readability
+  )
+
+
+
+#### social protection services
+
+###Please delete/adjust response options accordingly for the chart
+
+# Define the mapping for SPF01 variables (social protection services)
+spf01_mapping <- c(
+  "SPF01a" = "Cash / in-kind transfers",
+  "SPF01b" = "School feeding",
+  "SPF01c" = "Public works",
+  "SPF01d" = "Subsidies / fee waivers",
+  "SPF01e" = "Unemployment benefits",
+  "SPF01f" = "Health insurance",
+  "SPF01g" = "Old age pension",
+  "SPF01h" = "Crop / livestock insurance",
+  "SPF01j" = "Social work (child protection, disability, old persons, GBV)",
+  "SPF01k" = "Family support",
+  "SPF01l" = "Psychosocial support",
+  "SPF01m" = "Vocational training",
+  "SPF01n" = "Job search services",
+  "SPF01o" = "Wage subsidies",
+  "SPF01p" = "Improvements of land tenure security"
+)
+
+# Step 2: Calculate the percentage of individuals receiving each service
+spf01_percentages <- main %>%
+  group_by(pop_groups) %>%  # Group by population group (e.g., gender, age group)
+  summarise(across(c(SPF01a, SPF01b, SPF01c, SPF01d, SPF01e, SPF01f, SPF01g, SPF01h, 
+                     SPF01j, SPF01k, SPF01l, SPF01m, SPF01n, SPF01o, SPF01p), 
+                   ~ mean(. == "1", na.rm = TRUE) * 100)) %>%  # Ensure character comparison
+  pivot_longer(cols = -pop_groups,  # Exclude the PopGroup column from pivoting
+               names_to = "Service", 
+               values_to = "Percentage") %>%
+  mutate(Service = spf01_mapping[Service])  # Map column names to descriptive labels
+
+
+
+# Step 3: Create the bar chart
+
+ggplot(spf01_percentages, aes(x = reorder(Service, Percentage), y = Percentage, fill = Service)) +
+  geom_bar(stat = "identity", width = 0.7, color = "white") +
+  
+  # Add percentage labels on bars
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            position = position_stack(vjust = 0.5), size = 3.5) +
+  
+  coord_flip() +  # Flip the axes for better readability
+  
+  # Labels and title
+  labs(
+    title = "Proportion of Individuals Covered by National Social Protection Systems",
+    x = "Social Protection Service",
+    y = "Percentage",
+    caption = "Note: Each service is calculated independently."
+  ) +
+  
+  scale_fill_unhcr_d() +  # Use UNHCR color palette
+  
+  theme_unhcr() +  # Apply UNHCR theme
+  
+  # Customize theme elements
+  theme(
+    axis.text.y = element_text(size = 9),  # Adjust text size for readability
+    legend.position = "none"  # Remove the legend for simplicity
+  ) +
+  
+  # Separate plots for each population group (e.g., gender, age group)
+  facet_wrap(~pop_groups, scales = "free_y", ncol = 1)  # Create separate plots per PopGroup
+
+
+
+```
+
+#### How to calculate 16.2 Outcome indicator if the standard questionnaire was not used?
+
+Similar questions if households or certain individuals in the household are covered by social protection of the government can be a proxy to calculate the indicator.
+
+## How to download the final RBM results?
+
+```{r, eval=FALSE}
+
+####FINAL TABLE -----
+
+##Delete if you don't have some of the indicators
+# Combine all indicators into one data frame
+combined_RBM_indicators <- bind_rows(
+  impact2_2,
+  impact2_3,
+  impact3_2a,
+  impact3_2b,
+  impact3_3,
+  outcome1_2,
+  outcome1_3,
+  outcome4_1,
+  outcome4_2,
+  outcome5_2,
+  outcome8_2,
+  outcome9_1,
+  outcome9_2,
+  outcome10_1,
+  outcome10_2,
+  outcome12_1,
+  outcome12_2,
+  outcome13_1,
+  outcome13_2,
+  outcome13_3,
+  outcome14_1,
+  outcome16_1,
+  outcome16_2
+)
+
+# Export the combined data frame to an Excel file
+
+write_xlsx(combined_RBM_indicators, "Combined_Indicators.xlsx")
+
+# This will export the combined data frame to a single Excel file
+
+
+```
+
