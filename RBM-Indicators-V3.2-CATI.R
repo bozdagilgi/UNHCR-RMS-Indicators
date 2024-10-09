@@ -357,15 +357,15 @@ ggplot(impact2_2, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
 ###2.3 Proportion of people with access to health services -----
 ##Module :HACC01 - HACC04
 
-table(ind$HACC01) ## Needed to see a health professional for any reason
-table(ind$HACC02) ## the reason for seeking care
-table(ind$HACC03) ## did receive the needed health care
-table(ind$HACC04) ## if not, what are the reasons for not receiving the health care
+table(main$HACC01) ## Needed to see a health professional for any reason
+table(main$HACC02) ## the reason for seeking care
+table(main$HACC03) ## did receive the needed health care
+table(main$HACC04) ## if not, what are the reasons for not receiving the health care
 
 
 ##Calculate those who needed and accessed health services
 
-ind <- ind %>%
+main <- main %>%
   mutate(impact2_3=case_when(
     HACC01=="1" & HACC03=="1" ~ 1,
     HACC01=="0" ~ NA,
@@ -383,7 +383,7 @@ ind <- ind %>%
 
 ###Descriptives
 
-RMS_XXX_202X_ind <- ind %>%
+RMS_XXX_202X_main <- main %>%
   as_survey_design(
     ids = NULL,           # Specify the column with cluster IDs
     weights = NULL, # Specify the column with survey weights
@@ -393,7 +393,7 @@ RMS_XXX_202X_ind <- ind %>%
 
 ###Table by population groups
 
-impact2_3 <- RMS_XXX_202X_ind %>%
+impact2_3 <- RMS_XXX_202X_main %>%
   filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
   group_by(pop_groups) %>%                           # Group by pop_groups
   summarise(                                         # Summarise to compute values
@@ -432,7 +432,7 @@ ggplot(impact2_3, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
 
 
 
-impact2_3_AGD <- RMS_XXX_202X_ind %>%
+impact2_3_AGD <- RMS_XXX_202X_main %>%
   filter(!is.na(HH04) & !is.na(disability) & !is.na(HH07_cat)) %>%                     # Exclude if HH07_cat is NA
   group_by(HH07_cat, HH04, disability) %>%            # Group by Age, Gender, and Disability
   summarise(                                       # Summarise to compute values
@@ -482,7 +482,7 @@ reasons_mapping <- c(
   "HACC04_13" = "Health facility damaged/destroyed"
 )
 
-hacc_percentages <- ind %>%
+hacc_percentages <- main %>%
   summarise(
     HACC04_1 = mean(HACC04_1 == 1, na.rm = TRUE) * 100,
     HACC04_2 = mean(HACC04_2 == 1, na.rm = TRUE) * 100,
@@ -533,7 +533,7 @@ ggplot(hacc_percentages, aes(x = reorder(Reason, Percentage), y = Percentage, fi
 
 
 
-ind <- ind %>% 
+main <- main %>% 
   mutate(
     edu_primary = case_when(
       EDU01 == "1" & EDU02 == "1" & EDU03 == "2" ~ 1,  
@@ -551,7 +551,7 @@ ind <- ind %>%
 
 ###Results of the indicator table
 
-RMS_XXX_202X_ind <- ind %>%
+RMS_XXX_202X_main <- main %>%
   as_survey_design(
     ids = NULL,           # Specify the column with cluster IDs
     weights = NULL, # Specify the column with survey weights
@@ -564,7 +564,7 @@ RMS_XXX_202X_ind <- ind %>%
 
 ##Table 
 
-impact3_2a <- RMS_XXX_202X_ind %>%
+impact3_2a <- RMS_XXX_202X_main %>%
   filter(!is.na(pop_groups)) %>%                     # Exclude if pop_groups is NA
   group_by(pop_groups) %>%                          # Group by pop_groups
   summarise(
@@ -583,7 +583,7 @@ impact3_2a <- RMS_XXX_202X_ind %>%
 
 
 
-impact3_2a_AGD <- RMS_XXX_202X_ind %>%
+impact3_2a_AGD <- RMS_XXX_202X_main %>%
   filter(!is.na(pop_groups) & !is.na(disability) & !is.na(HH04)) %>%                     # Exclude if pop_groups is NA
   group_by(pop_groups,disability,HH04) %>%                          # Group by pop_groups
   summarise(
@@ -631,7 +631,7 @@ ggplot(impact3_2a_AGD, aes(x = HH04, y = mean_value, fill = disability)) +
 
 ###Include if they are attending secondary or secondary -technical and vocational
 
-ind <- ind %>%
+main <- main %>%
   mutate(
     edu_secondary = case_when(
       EDU01 == "1" & EDU02 == "1" & (EDU03 == "3" | EDU03 == "4") ~ 1,
@@ -649,14 +649,14 @@ ind <- ind %>%
 
 ###Results of the indicator table
 
-RMS_XXX_202X_ind <- ind %>%
+RMS_XXX_202X_main <- main %>%
   as_survey_design(
     ids = NULL,           # Specify the column with cluster IDs
     weights = NULL, # Specify the column with survey weights
     nest = TRUE              # Use TRUE if PSUs are nested within clusters (optional, based on your survey design)
   )
 
-impact3_2b <- RMS_XXX_202X_ind %>%
+impact3_2b <- RMS_XXX_202X_main %>%
   filter(!is.na(pop_groups)) %>%                     # Exclude if pop_groups is NA
   group_by(pop_groups) %>%                          # Group by pop_groups
   summarise(
@@ -674,7 +674,7 @@ impact3_2b <- RMS_XXX_202X_ind %>%
 ###Table with gender and disability included for the chart
 
 
-impact3_2b_AGD <- RMS_XXX_202X_ind %>%
+impact3_2b_AGD <- RMS_XXX_202X_main %>%
   filter(!is.na(pop_groups) & !is.na(disability) & !is.na(HH04)) %>%  # Exclude if pop_groups, disability, or HH04 is NA
   group_by(pop_groups, disability, HH04) %>%                          # Group by pop_groups, disability, and HH04
   summarise(
@@ -804,12 +804,12 @@ impact3_3_AGD <- RMS_XXX_202X_main %>%
 ##Module :REG03 - REG04
 
 
-# ind$REG03 - birth certificate
-# ind$REG04 - birth has been registered
+# main$REG03 - birth certificate
+# main$REG04 - birth has been registered
 
 ##Calculate children who has a birth certificate
 
-ind <- ind %>%
+main <- main %>%
   mutate(birthCertificate = case_when(
     REG03 == "0" | REG03 == "98" ~ 0,
     REG03 == "1" ~ 1,
@@ -825,7 +825,7 @@ ind <- ind %>%
   ))
 
 
-ind <- ind %>%
+main <- main %>%
   mutate(birthRegistered = case_when(
     REG04 == "0" | REG04 == "98" ~ 0,
     REG04 == "1" ~ 1,
@@ -842,7 +842,7 @@ ind <- ind %>%
   ))
 
 # Mutate outcome1_2 variable 
-ind <- ind %>%
+main <- main %>%
   mutate(outcome1_2 = case_when(
     (birthRegistered == 1 | birthCertificate == 1) & HH07 < 5 ~ 1,  # Child has been registered or has birth certificate
     (birthRegistered == 0 & birthCertificate == 0) & HH07 < 5 ~ 0,  # Child not registered and has no birth certificate
@@ -861,7 +861,7 @@ ind <- ind %>%
 
 ##Table for srvyr
 
-RMS_XXX_202X_ind <- ind %>%
+RMS_XXX_202X_main <- main %>%
   as_survey_design(
     ids = NULL,           # Specify the column with cluster IDs
     weights = NULL, # Specify the column with survey weights
@@ -872,7 +872,7 @@ RMS_XXX_202X_ind <- ind %>%
 ###Table 
 
 
-outcome1_2 <- RMS_XXX_202X_ind %>%
+outcome1_2 <- RMS_XXX_202X_main %>%
   filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
   group_by(pop_groups) %>%                           # Group by pop_groups
   summarise(                                         # Summarise to compute values
@@ -886,7 +886,7 @@ outcome1_2 <- RMS_XXX_202X_ind %>%
 ##Table with disability and gender
 
 
-outcome1_2_AGD <- RMS_XXX_202X_ind %>%
+outcome1_2_AGD <- RMS_XXX_202X_main %>%
   filter(!is.na(HH04) & !is.na(disability) & !is.na(pop_groups) & HH07 < 5 ) %>%  # Exclude HH07_cat categories 1, 2, and 5
   group_by(HH07_cat, HH04, pop_groups) %>%
   summarise(
@@ -931,29 +931,29 @@ ggplot(outcome1_2_AGD, aes(x = HH04, y = mean_value, fill = HH04)) +  # Fill map
 ###Calculate valid identity documents for under 5 with REG05 and REG06 variables
 
 
-#ind$REG05a - passport
-#ind$REG05b - civil/government issued ID
-#ind$REG05c - residency permit
-#ind$REG05d - statelessness documentation
-#ind$REG05e - household card of address/family book
-#ind$REG05f - social security card
-#ind$REG06 - any other document establishes identity
+#main$REG05a - passport
+#main$REG05b - civil/government issued ID
+#main$REG05c - residency permit
+#main$REG05d - statelessness documentation
+#main$REG05e - household card of address/family book
+#main$REG05f - social security card
+#main$REG06 - any other document establishes identity
 #add birth certificate as additional document from REG03
 
 
 
-#ind$REG01a # passport
-#ind$REG01b # birth certificate
-#ind$REG01c # civil/ government issued ID
-#ind$REG01d # residency permit
-#ind$REG01e # statelessness documentation
-#ind$REG01f # household card of address/family book
-#ind$REG01g # social security card
-#ind$REG02 # any other document establishes identity
+#main$REG01a # passport
+#main$REG01b # birth certificate
+#main$REG01c # civil/ government issued ID
+#main$REG01d # residency permit
+#main$REG01e # statelessness documentation
+#main$REG01f # household card of address/family book
+#main$REG01g # social security card
+#main$REG02 # any other document establishes identity
 
 #Make sure to delete REG05e below from the script if you don't have any stateless 
 
-ind <- ind %>%
+main <- main %>%
   mutate(document_under5 = case_when(
     REG05a == "1" | REG05b == "1" | REG05c == "1" | REG05d == "1" | REG05e == "1" | REG05f == "1" | REG06 == "1" | REG03 == "1" ~ 1,
     REG05a != "1" & REG05b != "1" & REG05c != "1" & REG05d != "1" & REG05e != "1" & REG05f != "1" & REG06 != "1" & REG03 != "1" ~ 0,
@@ -961,7 +961,7 @@ ind <- ind %>%
   ))
 
 # Mutate document_above5 using character values
-ind <- ind %>%
+main <- main %>%
   mutate(document_above5 = case_when(
     REG01a == "1" | REG01b == "1" | REG01c == "1" | REG01d == "1" | REG01e == "1" | REG01f == "1" | REG01g == "1" | REG02 == "1" ~ 1,
     REG01a != "1" & REG01b != "1" & REG01c != "1" & REG01d != "1" & REG01e != "1" & REG01f != "1" & REG01g != "1" & REG02 != "1" ~ 0,
@@ -969,7 +969,7 @@ ind <- ind %>%
   ))
 
 # Combine both age groups
-ind <- ind %>%
+main <- main %>%
   mutate(outcome1_3 = case_when(
     (document_above5 == 1 | document_under5 == 1) ~ 1,  
     (document_above5 == 0 | document_under5 == 0) ~ 0
@@ -986,7 +986,7 @@ ind <- ind %>%
 
 
 
-RMS_XXX_202X_ind <- ind %>%
+RMS_XXX_202X_main <- main %>%
   as_survey_design(
     ids = NULL,           # Specify the column with cluster IDs
     weights = NULL, # Specify the column with survey weights
@@ -995,7 +995,7 @@ RMS_XXX_202X_ind <- ind %>%
 
 ###Table by population groups
 
-outcome1_3 <- RMS_XXX_202X_ind %>%
+outcome1_3 <- RMS_XXX_202X_main %>%
   filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
   group_by(pop_groups) %>%                           # Group by pop_groups
   summarise(                                         # Summarise to compute values
@@ -1034,7 +1034,7 @@ ggplot(outcome1_3, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
 
 
 
-outcome1_3_AGD <- RMS_XXX_202X_ind %>%
+outcome1_3_AGD <- RMS_XXX_202X_main %>%
   filter(!is.na(HH04) & !is.na(disability) & !is.na(HH07_cat)) %>%                     # Exclude if HH07_cat is NA
   group_by(HH07_cat, HH04, disability) %>%            # Group by Age, Gender, and Disability
   summarise(                                       # Summarise to compute values
@@ -1082,7 +1082,7 @@ identity_documents <- c(
 
 # Calculate the percentage of '1's for each identity document
 
-identity_document_percentages <- RMS_XXX_202X_ind %>%
+identity_document_percentages <- RMS_XXX_202X_main %>%
   summarise(across(c(REG01a, REG01b, REG01c, REG01d, REG01e, REG01f, REG01g, REG02),
                    ~ mean(. == "1", na.rm = TRUE) * 100)) %>%
   pivot_longer(cols = everything(), 
@@ -1400,10 +1400,10 @@ ggplot(vaw01_percentages, aes(x = reorder(Question, Percentage), y = Percentage,
 ## Child Protection
 
 
-ind$COMM01 <- labelled_chr2dbl(ind$COMM01)
-ind$COMM02 <- labelled_chr2dbl(ind$COMM02)
-ind$COMM03 <- labelled_chr2dbl(ind$COMM03)
-ind$COMM04 <- labelled_chr2dbl(ind$COMM04)
+main$COMM01 <- labelled_chr2dbl(main$COMM01)
+main$COMM02 <- labelled_chr2dbl(main$COMM02)
+main$COMM03 <- labelled_chr2dbl(main$COMM03)
+main$COMM04 <- labelled_chr2dbl(main$COMM04)
 
 
 ###This indicator comes from the individual level dataset
@@ -1412,7 +1412,7 @@ ind$COMM04 <- labelled_chr2dbl(ind$COMM04)
 #Children who participate in community-based programmes at least once 
 ##under adult supervision in a physically safe area
 
-ind <- ind %>%
+main <- main %>%
   mutate(outcome5_2 = case_when(
     (COMM01 == "1" & (COMM02 >= "1" & COMM02 != "98") & COMM03 == "1" & COMM04 == "1") ~ 1,  # All conditions are character comparisons
     (COMM01 == "0" | 
@@ -1434,7 +1434,7 @@ ind <- ind %>%
 ###Table 
 
 
-RMS_XXX_202X_ind <- ind %>%
+RMS_XXX_202X_main <- main %>%
   as_survey_design(
     ids = NULL,           # Specify the column with cluster IDs
     weights = NULL, # Specify the column with survey weights
@@ -1443,7 +1443,7 @@ RMS_XXX_202X_ind <- ind %>%
 
 ##Table 
 
-outcome5_2 <- RMS_XXX_202X_ind %>%
+outcome5_2 <- RMS_XXX_202X_main %>%
   filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
   group_by(pop_groups) %>%                           # Group by pop_groups
   summarise(                                         # Summarise to compute values
@@ -1457,7 +1457,7 @@ outcome5_2 <- RMS_XXX_202X_ind %>%
 ##Table with disability and gender
 
 
-outcome5_2_AGD <- RMS_XXX_202X_ind %>%
+outcome5_2_AGD <- RMS_XXX_202X_main %>%
   filter(!is.na(HH04) & !is.na(disability) & !is.na(pop_groups)) %>%  # Missing pipe added here
   group_by(HH04, pop_groups, disability) %>%
   summarise(
@@ -1909,7 +1909,7 @@ ggplot(light02_percentages, aes(x = reorder(LIGHT02, Percentage), y = Percentage
 ##Module :MMR01-MMR04 ##  MICS TC.1.1 UNICEF calculates on the first dose received##
 
 
-ind <- ind %>%
+main <- main %>%
   mutate(outcome10_1=case_when(
     MMR03=="1" ~ 1, MMR03=="0"  | MMR03=="98" ~ 0)
   ) %>%
@@ -1923,7 +1923,7 @@ ind <- ind %>%
 
 ###Table 
 
-RMS_XXX_202X_ind <- ind %>%
+RMS_XXX_202X_main <- main %>%
   as_survey_design(
     ids = NULL,           # Specify the column with cluster IDs
     weights = NULL, # Specify the column with survey weights
@@ -1932,7 +1932,7 @@ RMS_XXX_202X_ind <- ind %>%
 
 
 
-outcome10_1 <- RMS_XXX_202X_ind %>%
+outcome10_1 <- RMS_XXX_202X_main %>%
   filter(!is.na(pop_groups)) %>%                     # Exclude if pop groups is NA
   group_by(pop_groups) %>%                           # Group by pop_groups
   summarise(                                         # Summarise to compute values
@@ -1969,7 +1969,7 @@ ggplot(outcome10_1, aes(x = pop_groups, y = mean_value, fill = pop_groups)) +
 ##Table with disability and gender
 
 
-outcome10_1_AGD <- RMS_XXX_202X_ind %>%
+outcome10_1_AGD <- RMS_XXX_202X_main %>%
   filter(!is.na(HH04) & !is.na(disability) & !is.na(pop_groups) & HH07 < 5 ) %>%  # Exclude HH07_cat categories 1, 2, and 5
   group_by(HH07_cat, HH04, pop_groups) %>%
   summarise(
@@ -2735,25 +2735,25 @@ outcome13_3_AGD <- RMS_XXX_202X_main %>%
 
 ###Calculate valid identity documents for under 5 with REG05 and REG06 variables
 
-#ind$REG05a - passport
-#ind$REG05b - civil/government issued ID
-#ind$REG05c - residency permit
-#ind$REG05d - statelessness documentation
-#ind$REG05e - household card of address/family book
-#ind$REG05f - social security card
-#ind$REG06 - any other document establishes identity
+#main$REG05a - passport
+#main$REG05b - civil/government issued ID
+#main$REG05c - residency permit
+#main$REG05d - statelessness documentation
+#main$REG05e - household card of address/family book
+#main$REG05f - social security card
+#main$REG06 - any other document establishes identity
 #add birth certificate as additional document from REG03
 
-#ind$REG01a # passport
-#ind$REG01b # birth certificate
-#ind$REG01c # civil/ government issued ID
-#ind$REG01d # residency permit
-#ind$REG01e # statelessness documentation
-#ind$REG01f # household card of address/family book
-#ind$REG01g # social security card
-#ind$REG02 # any other document establishes identity
+#main$REG01a # passport
+#main$REG01b # birth certificate
+#main$REG01c # civil/ government issued ID
+#main$REG01d # residency permit
+#main$REG01e # statelessness documentation
+#main$REG01f # household card of address/family book
+#main$REG01g # social security card
+#main$REG02 # any other document establishes identity
 
-ind <- ind %>%
+main <- main %>%
   # Calculate identity documents for children under 5
   mutate(document_under5 = case_when(
     REG05a == "1" | REG05b == "1" | REG05c == "1" | REG05d == "1" | REG05e == "1" | REG05f == "1" | REG06 == "1" | REG03 == "1" ~ 1,  # Document present
@@ -2792,7 +2792,7 @@ ind <- ind %>%
 
 ###Table by population groups
 
-RMS_XXX_202X_ind <- ind %>%
+RMS_XXX_202X_main <- main %>%
   as_survey_design(
     ids = NULL,           # Specify the column with cluster IDs
     weights = NULL, # Specify the column with survey weights
@@ -2800,7 +2800,7 @@ RMS_XXX_202X_ind <- ind %>%
   )
 
 
-outcome14_1 <- RMS_XXX_202X_ind %>%
+outcome14_1 <- RMS_XXX_202X_main %>%
   filter(pop_groups == 'Refugee returnees') %>%  # Use equivalent of pop groups for refugee returnees
   group_by(pop_groups) %>%  # Group by pop_groups
   summarise(  
