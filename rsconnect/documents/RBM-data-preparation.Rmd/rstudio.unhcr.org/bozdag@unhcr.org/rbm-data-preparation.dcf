@@ -1,0 +1,12 @@
+name: rbm-data-preparation
+title: RBM-data-preparation
+username: bozdag@unhcr.org
+account: bozdag@unhcr.org
+server: rstudio.unhcr.org
+hostUrl: https://rstudio.unhcr.org/__api__
+appId: 666
+bundleId: 3153
+url: https://rstudio.unhcr.org/content/2185d3e7-b564-4e6e-8a79-8bab859b7591/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
