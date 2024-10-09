@@ -490,6 +490,12 @@ ind <- ind %>%
   ))
 
 
+###Put the labels 
+ind <- ind %>%
+  mutate(disability = factor(disability, levels = c(0, 1), labels = c("Non-disabled", "Disabled")))
+
+
+
 ####Check final frequencies
 
 table(ind$disability)
