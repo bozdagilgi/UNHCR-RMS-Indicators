@@ -1,0 +1,12 @@
+name: rbm_indicator_calculations__rms_v32
+title: RBM Indicator Calculations ( RMS v3.2)
+username: bozdag@unhcr.org
+account: bozdag@unhcr.org
+server: rstudio.unhcr.org
+hostUrl: https://rstudio.unhcr.org/__api__
+appId: 669
+bundleId: 3166
+url: https://rstudio.unhcr.org/content/49090c6f-0a41-4a5c-a554-9e5bacb0c8fd/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

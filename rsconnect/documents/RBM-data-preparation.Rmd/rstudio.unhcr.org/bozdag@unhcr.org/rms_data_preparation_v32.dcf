@@ -1,0 +1,12 @@
+name: rms_data_preparation_v32
+title: RMS Data Preparation v3.2
+username: bozdag@unhcr.org
+account: bozdag@unhcr.org
+server: rstudio.unhcr.org
+hostUrl: https://rstudio.unhcr.org/__api__
+appId: 663
+bundleId: 3160
+url: https://rstudio.unhcr.org/data-preparation/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

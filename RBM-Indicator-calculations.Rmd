@@ -17,6 +17,8 @@ Date: Last revision was on October 2024
     + [Main link](https://github.com/bozdagilgi/UNHCR-RMS-Indicators)
     + [CAPI v3.2 Data Preparation](https://github.com/bozdagilgi/UNHCR-RMS-Indicators/blob/main/RBM-Data-Preparation-V3.2-CAPI.R)
     + [CAPI v3.2 RBM Indicators](https://github.com/bozdagilgi/UNHCR-RMS-Indicators/blob/main/RBM-Indicators-V3.2-CAPI.R)
+    + [CATI v3.2 Data Preparation](https://github.com/bozdagilgi/UNHCR-RMS-Indicators/blob/main/data-preparation-V3.2-CATI.R)
+    + [CATI v3.2 RBM Indicators](https://github.com/bozdagilgi/UNHCR-RMS-Indicators/blob/main/RBM-Indicators-V3.2-CATI.R)
     
 **The above refers to the v3.2 RMS questionnaire, which is the final version. For all other versions, please visit the main link**  
 
