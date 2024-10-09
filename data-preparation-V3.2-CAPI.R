@@ -18,21 +18,14 @@ rm(list = ls())
 # Install pacman if not already installed
 if(!require(pacman)) install.packages('pacman')
 
-# Install the remotes package for GitHub installations
-install.packages("remotes")
-
-# Install GitHub packages if needed
-remotes::install_github("unhcr/unhcrthemes")
-remotes::install_github("dickoa/robotoolbox")
 
 # Load all required libraries using pacman
 pacman::p_load(
   tidyverse, dplyr, tidyr, rlang, purrr, magrittr, expss, srvyr, 
   readr, labelled, pastecs, psych, tableone, outbreaks, ggplot2, 
   unhcrthemes, scales, gt, webshot2, sjlabelled, waffle, writexl, 
-  haven, readxl, dm, janitor, visdat, DiagrammeR, robotoolbox
+  haven, readxl, dm, janitor, visdat, DiagrammeR, robotoolbox, remotes
 )
-
 
 ####Once you load all packages, you can import your data directly from KoBO.
 
@@ -42,15 +35,15 @@ pacman::p_load(
 
 
 ###Enter your KoBo username and password
-kobo_token(username = "xxxxx",
-           password = "xxxxx",
+kobo_token(username = "xxxx",
+           password = "xxxx",
            url = "https://kobo.unhcr.org")
 
 
 ###Once you enter, you will receive your token from KoBO which you need to insert as below
 
 kobo_setup(url = "https://kobo.unhcr.org",
-           token = "xxxxx")
+           token = "xxxx")
 
 ###Run the script below to see list of your surveys 
 asset_list <- kobo_asset_list()
@@ -310,8 +303,7 @@ labelled_chr2dbl <- function(x) {
   x
 }
 
-##Check your variable if it's numeric
-class(ind$DIS01)
+
 
 # Replace "98"  and "99" with "NA" using dplyr
 
@@ -349,6 +341,7 @@ ind <- ind %>%
     1,
     disability
   ))
+
 
 
 ##Put the labels
